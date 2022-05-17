@@ -1,0 +1,75 @@
+# ===================================================
+# Unit status
+# ===================================================
+
+
+record(mbbiDirect, "PS$(UNIT_ADR):raw_stat") {
+	field(SCAN, ".1 second")
+	field(DTYP, "stream")
+    field(INP, "@tdk_lambda_bin_queries.proto getStatus($(UNIT_ADR), 0x8$(UNIT_ADR)) PS1")
+    field(FLNK, "PS$(UNIT_ADR):raw_stat_fanout")
+}
+
+record(fanout, "PS$(UNIT_ADR):raw_stat_fanout") {
+    field(SCAN, "Passive")
+    field(SELM, "All")
+    field(LNK0, "PS$(UNIT_ADR):stat_const_voltage")
+    field(LNK1, "PS$(UNIT_ADR):stat_const_current")
+    field(LNK2, "PS$(UNIT_ADR):stat_no_fault")
+    field(LNK3, "PS$(UNIT_ADR):stat_fault_active")
+    field(LNK4, "PS$(UNIT_ADR):stat_autorestart_enable")
+    field(LNK5, "PS$(UNIT_ADR):stat_fold_enable")
+    field(LNK6, "PS$(UNIT_ADR):stat_local_mode")
+}
+
+record(bi, "PS$(UNIT_ADR):stat_const_voltage") {
+    field(SCAN, "Passive")
+    field(DTYP, "Raw Soft Channel")
+    field(INP, "PS$(UNIT_ADR):raw_stat.B0 NPP")
+}
+
+record(bi, "PS$(UNIT_ADR):stat_const_current") {
+    field(SCAN, "Passive")
+    field(DTYP, "Raw Soft Channel")
+    field(INP, "PS$(UNIT_ADR):raw_stat.B1 NPP")
+}
+
+record(bi, "PS$(UNIT_ADR):stat_no_fault") {
+    field(SCAN, "Passive")
+    field(DTYP, "Raw Soft Channel")
+    field(INP, "PS$(UNIT_ADR):raw_stat.B2 NPP")
+}
+
+record(bi, "PS$(UNIT_ADR):stat_fault_active") {
+    field(SCAN, "Passive")
+    field(DTYP, "Raw Soft Channel")
+    field(INP, "PS$(UNIT_ADR):raw_stat.B3 NPP")
+}
+
+record(bi, "PS$(UNIT_ADR):stat_autorestart_enable") {
+    field(SCAN, "Passive")
+    field(DTYP, "Raw Soft Channel")
+    field(INP, "PS$(UNIT_ADR):raw_stat.B4 NPP")
+}
+
+record(bi, "PS$(UNIT_ADR):stat_fold_enable") {
+    field(SCAN, "Passive")
+    field(DTYP, "Raw Soft Channel")
+    field(INP, "PS$(UNIT_ADR):raw_stat.B5 NPP")
+}
+
+record(bi, "PS$(UNIT_ADR):stat_local_mode") {
+    field(SCAN, "Passive")
+    field(DTYP, "Raw Soft Channel")
+    field(INP, "PS$(UNIT_ADR):raw_stat.B7 NPP")
+}
+
+
+# ===================================================
+# Unit fault
+# ===================================================
+
+
+record(mbbiDirect, "PS$(UNIT_ADR):raw_flt") {
+	field(SCAN, "Passive")
+}

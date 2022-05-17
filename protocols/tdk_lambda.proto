@@ -1,0 +1,69 @@
+ReplyTimeout = 2000;
+Terminator = "\r";
+
+setAddress {
+    out "ADR \$1";
+    in "OK";
+}
+
+getSerialNumber {
+    @init {
+        wait 100;
+        setAddress;
+        out "SN?";
+        in "%s";
+    }
+}
+
+getVoltageAndCurrent {
+    wait 100;
+    setAddress;
+    out "DVC?";
+    in 
+    "%f,"                       # Actual (measured) voltage (put in PS$(UNIT_ADR):volt_real)
+    "%*f,"                      # Programmed (set) voltage (skip)
+    "%(PS\$1:curr_real)f,"      # Actual (measured) current> (put in PS$(UNIT_ADR):curr_real)
+    "%*f,"                      # Programmed (set) current (skip)
+    "%*f,"                      # Over voltage set point protectiont (skip)
+    "%*f";                      # Under voltage set point protectiont (skip)
+}
+
+setVoltage {
+    out "PV %f";
+    @init {
+        wait 100;
+        setAddress;
+        out "PV?";
+        in "%f";
+    }
+}
+
+setCurrent {
+    out "PC %f";
+    @init {
+        wait 100;
+        setAddress;
+        out "PC?";
+        in "%f";
+    }
+}
+
+setOverVoltageProtection {
+    out "OVP %f";
+    @init {
+        wait 100;
+        setAddress;
+        out "OVP?";
+        in "%f";
+    }
+}
+
+setUnderVoltageLimit {
+    out "UVL %f";
+    @init {
+        wait 100;
+        setAddress;
+        out "UVL?";
+        in "%f";
+    }
+}

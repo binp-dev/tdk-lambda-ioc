@@ -1,0 +1,5 @@
+file db/records.db {
+    pattern {UNIT_ADR}
+        {"6"}
+        {"7"}
+}

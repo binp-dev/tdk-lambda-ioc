@@ -1,0 +1,6 @@
+db
+dbd
+bin
+# ignore O.Common and O.linux-x86_64 directories in triadaTvApp/src triadaTvApp/Db configure/
+**/O.*
+iocBoot/iocTDKlambda/envPaths
