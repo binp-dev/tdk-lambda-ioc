@@ -17,7 +17,7 @@ epicsEnvSet("STREAM_PROTOCOL_PATH", "${TOP}/protocols")
 #drvAsynIPPortConfigure ("PS1", "127.0.0.1:10000")
 
 drvAsynSerialPortConfigure ("PS1","/dev/ttyUSB0")
-asynSetOption ("PS1", 0, "baud", "9600")
+asynSetOption ("PS1", 0, "baud", "19200")
 asynSetOption ("PS1", 0, "bits", "8")
 asynSetOption ("PS1", 0, "parity", "none")
 asynSetOption ("PS1", 0, "stop", "1")
