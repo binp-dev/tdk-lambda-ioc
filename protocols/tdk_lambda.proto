@@ -8,7 +8,6 @@ setAddress {
 
 getSerialNumber {
     @init {
-        wait 100;
         setAddress;
         out "SN?";
         in "%s";
@@ -16,7 +15,6 @@ getSerialNumber {
 }
 
 getVoltageAndCurrent {
-    wait 100;
     setAddress;
     out "DVC?";
     in 
@@ -31,7 +29,6 @@ getVoltageAndCurrent {
 setVoltage {
     out "PV %f";
     @init {
-        wait 100;
         setAddress;
         out "PV?";
         in "%f";
@@ -41,7 +38,6 @@ setVoltage {
 setCurrent {
     out "PC %f";
     @init {
-        wait 100;
         setAddress;
         out "PC?";
         in "%f";
@@ -51,7 +47,6 @@ setCurrent {
 setOverVoltageProtection {
     out "OVP %f";
     @init {
-        wait 100;
         setAddress;
         out "OVP?";
         in "%f";
@@ -61,7 +56,6 @@ setOverVoltageProtection {
 setUnderVoltageLimit {
     out "UVL %f";
     @init {
-        wait 100;
         setAddress;
         out "UVL?";
         in "%f";

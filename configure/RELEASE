@@ -27,11 +27,11 @@
 
 # If using the sequencer, point SNCSEQ at its top directory:
 #SNCSEQ = $(MODULES)/seq-ver
-ASYN=/home/agerasev/develop/asyn
-STREAM=/home/agerasev/develop/stream-device
+ASYN=/opt/asyn
+STREAM=/opt/stream-device
 
 # EPICS_BASE should appear last so earlier modules can override stuff:
-EPICS_BASE=/home/agerasev/develop/epics-base
+EPICS_BASE=/opt/epics-base
 
 # Set RULES here if you want to use build rules from somewhere
 # other than EPICS_BASE:
