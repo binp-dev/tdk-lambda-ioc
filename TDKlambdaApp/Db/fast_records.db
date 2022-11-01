@@ -4,7 +4,7 @@
 
 
 record(mbbiDirect, "PS$(UNIT_ADR):raw_stat") {
-	field(SCAN, ".1 second")
+	field(SCAN, "1 second")
 	field(DTYP, "stream")
     field(INP, "@tdk_lambda_bin_queries.proto getStatus($(UNIT_ADR), 0x8$(UNIT_ADR)) PS1")
     field(FLNK, "PS$(UNIT_ADR):raw_stat_fanout")
