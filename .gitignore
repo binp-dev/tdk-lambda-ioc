@@ -1,6 +1,11 @@
-db
-dbd
-bin
-# ignore O.Common and O.linux-x86_64 directories in triadaTvApp/src triadaTvApp/Db configure/
+/db
+/dbd
+/bin
+/lib
+
+# ignore O.Common and O.linux-x86_64 directories
 **/O.*
-iocBoot/iocTDKlambda/envPaths
+/iocBoot/iocTDKlambda/envPaths
+
+# Added by cargo
+/target

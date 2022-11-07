@@ -1,15 +1,13 @@
 record(stringin, "PS$(UNIT_ADR):ser_numb") {
 	field(SCAN, "Passive")
-	field(DTYP, "stream")
-	field(INP, "@tdk_lambda.proto getSerialNumber($(UNIT_ADR)) PS1")
+	field(DTYP, "ferrite")
 }
 
 #====================================
 
 record(ai, "PS$(UNIT_ADR):volt_real") {
 	field(SCAN, "1 second")
-	field(DTYP, "stream")
-	field(INP, "@tdk_lambda.proto getVoltageAndCurrent($(UNIT_ADR)) PS1")
+	field(DTYP, "ferrite")
 	field(EGU, "V")
 }
 
@@ -21,27 +19,23 @@ record(ai, "PS$(UNIT_ADR):curr_real") {
 #====================================
 
 record(ao, "PS$(UNIT_ADR):over_volt_set_point") {
-	field(DTYP, "stream")
-	field(OUT, "@tdk_lambda.proto setOverVoltageProtection($(UNIT_ADR)) PS1")
+	field(DTYP, "ferrite")
 	field(EGU, "V")
 }
 
 record(ao, "PS$(UNIT_ADR):under_volt_set_point") {
-	field(DTYP, "stream")
-	field(OUT, "@tdk_lambda.proto setUnderVoltageLimit($(UNIT_ADR)) PS1")
+	field(DTYP, "ferrite")
 	field(EGU, "V")
 }
 
 #==================================
 
 record(ao, "PS$(UNIT_ADR):volt_set") {
-	field(DTYP, "stream")
-	field(OUT, "@tdk_lambda.proto setVoltage($(UNIT_ADR)) PS1")
+	field(DTYP, "ferrite")
 	field(EGU, "V")
 }
 
 record(ao, "PS$(UNIT_ADR):curr_set") {
-	field(DTYP, "stream")
-	field(OUT, "@tdk_lambda.proto setCurrent($(UNIT_ADR)) PS1")
+	field(DTYP, "ferrite")
 	field(EGU, "A")
 }

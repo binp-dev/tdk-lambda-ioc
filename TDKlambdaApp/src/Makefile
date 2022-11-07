@@ -15,15 +15,6 @@ DBD += TDKlambda.dbd
 # TDKlambda.dbd will be made up from these files:
 TDKlambda_DBD += base.dbd
 
-# Include dbd files from all support applications:
-TDKlambda_DBD += asynRegistrars.dbd
-TDKlambda_DBD += asyn.dbd
-TDKlambda_DBD += stream.dbd
-
-# Add all the support libraries needed by this IOC
-TDKlambda_LIBS += stream
-TDKlambda_LIBS += asyn
-
 # TDKlambda_registerRecordDeviceDriver.cpp derives from TDKlambda.dbd
 TDKlambda_SRCS += TDKlambda_registerRecordDeviceDriver.cpp
 
@@ -31,8 +22,11 @@ TDKlambda_SRCS += TDKlambda_registerRecordDeviceDriver.cpp
 TDKlambda_SRCS_DEFAULT += TDKlambdaMain.cpp
 TDKlambda_SRCS_vxWorks += -nil-
 
-# Add support from base/src/vxWorks if needed
-#TDKlambda_OBJS_vxWorks += $(EPICS_BASE_BIN)/vxComLibrary
+# Use Ferrite
+TDKlambda_DBD += Ferrite.dbd
+TDKlambda_LIBS += Ferrite
+SHRLIB_SEARCH_DIRS += $(TOP)/target/debug
+TDKlambda_LIBS += backend
 
 # Finally link to the EPICS Base libraries
 TDKlambda_LIBS += $(EPICS_BASE_IOC_LIBS)
