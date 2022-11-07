@@ -1,18 +1,19 @@
 record(stringin, "PS$(UNIT_ADR):ser_numb") {
-	field(SCAN, "Passive")
-	field(DTYP, "ferrite")
+	#field(SCAN, "I/O Intr")
+	#field(DTYP, "ferrite")
 }
 
 #====================================
 
 record(ai, "PS$(UNIT_ADR):volt_real") {
-	field(SCAN, "1 second")
 	field(DTYP, "ferrite")
+	field(SCAN, "I/O Intr")
 	field(EGU, "V")
 }
 
 record(ai, "PS$(UNIT_ADR):curr_real") {
-	field(SCAN, "Passive")
+	field(DTYP, "ferrite")
+	field(SCAN, "I/O Intr")
 	field(EGU, "A")
 }
 
@@ -20,11 +21,13 @@ record(ai, "PS$(UNIT_ADR):curr_real") {
 
 record(ao, "PS$(UNIT_ADR):over_volt_set_point") {
 	field(DTYP, "ferrite")
+	field(SCAN, "I/O Intr")
 	field(EGU, "V")
 }
 
 record(ao, "PS$(UNIT_ADR):under_volt_set_point") {
 	field(DTYP, "ferrite")
+	field(SCAN, "I/O Intr")
 	field(EGU, "V")
 }
 
@@ -32,10 +35,12 @@ record(ao, "PS$(UNIT_ADR):under_volt_set_point") {
 
 record(ao, "PS$(UNIT_ADR):volt_set") {
 	field(DTYP, "ferrite")
+	field(SCAN, "I/O Intr")
 	field(EGU, "V")
 }
 
 record(ao, "PS$(UNIT_ADR):curr_set") {
 	field(DTYP, "ferrite")
+	field(SCAN, "I/O Intr")
 	field(EGU, "A")
 }
