@@ -1,6 +1,6 @@
 record(stringin, "PS$(UNIT_ADR):ser_numb") {
-	#field(SCAN, "I/O Intr")
-	#field(DTYP, "ferrite")
+	field(SCAN, "I/O Intr")
+	field(DTYP, "ferrite")
 }
 
 #====================================
