@@ -1,4 +1,5 @@
 mod device;
+mod serial;
 
 /// *Export symbols being called from IOC.*
 pub use ferrite::export;

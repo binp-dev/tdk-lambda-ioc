@@ -103,6 +103,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-priority-channel"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c21678992e1b21bebfe2bc53ab5f5f68c106eddab31b24e0bb06e9b715a86640"
+dependencies = [
+ "event-listener",
+]
+
+[[package]]
 name = "async-ringbuf"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -285,9 +294,11 @@ dependencies = [
  "async-ringbuf",
  "async-std",
  "atomic_enum",
+ "bitflags",
  "futures",
  "lazy_static",
  "log",
+ "stavec",
 ]
 
 [[package]]
@@ -570,6 +581,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "num-traits"
+version = "0.2.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "578ede34cf02f8924ab9447f50c28075b4d3e5b269972345e7e0372b38c6cdcd"
+dependencies = [
+ "autocfg",
+]
+
+[[package]]
 name = "once_cell"
 version = "1.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -693,6 +713,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "stavec"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7c7593705bff487b33168db5c7df876d076293bf8559a2c9ac4124f0de995ce4"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
 name = "syn"
 version = "1.0.103"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -707,6 +736,7 @@ dependencies = [
 name = "tdk-lambda-ioc"
 version = "0.1.0"
 dependencies = [
+ "async-priority-channel",
  "env_logger",
  "ferrite-core",
  "log",

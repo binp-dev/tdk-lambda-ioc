@@ -13,13 +13,14 @@ path = "src/lib.rs"
 [dependencies]
 ferrite = { package = "ferrite-core", path = "ferrite-rs" }
 tokio-serial = "5.4.4"
+async-priority-channel = "0.1.0"
 log = "0.4"
 env_logger = "0.9.1"
 macro_rules_attribute = "0.1.2"
 
 [dependencies.tokio]
 version = "1.21.2"
-features = ["rt"]
+features = ["rt", "sync"]
 
 [workspace]
 members = ["ferrite-rs"]
