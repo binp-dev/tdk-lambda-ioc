@@ -1,3 +1,4 @@
+use crate::serial::{Handle, Priority};
 use ferrite::*;
 
 struct Vars {
@@ -8,11 +9,6 @@ struct Vars {
     pub under_volt_set_point: Variable<f64, true, true, false>,
     pub volt_set: Variable<f64, true, true, false>,
     pub curr_set: Variable<f64, true, true, false>,
-}
-
-pub struct Device {
-    addr: u8,
-    vars: Vars,
 }
 
 fn take_var<V>(ctx: &mut Context, name: &str) -> V
@@ -43,12 +39,29 @@ impl Vars {
     }
 }
 
+pub struct Device {
+    addr: u8,
+    vars: Vars,
+    serial: Handle,
+}
+
 impl Device {
-    pub fn new(addr: u8, ctx: &mut Context) -> Self {
+    pub fn new(addr: u8, epics: &mut Context, serial: Handle) -> Self {
         let prefix = format!("PS{}:", addr);
         Self {
             addr,
-            vars: Vars::new(&prefix, ctx),
+            serial,
+            vars: Vars::new(&prefix, epics),
+        }
+    }
+
+    pub async fn run(self) -> ! {
+        loop {
+            self.serial
+                .req
+                .run(Vec::from("DVC?".as_bytes()), Priority::Queued)
+                .await;
+            self.serial.req.yield_();
         }
     }
 }

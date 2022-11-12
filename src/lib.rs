@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 mod device;
 mod serial;
 
@@ -5,28 +7,30 @@ mod serial;
 pub use ferrite::export;
 
 use ferrite::{entry_point, Context};
+use futures::executor::block_on;
 use macro_rules_attribute::apply;
-use std::collections::HashMap;
 use tokio::runtime;
 
-use crate::device::Device;
+use crate::{device::Device, serial::Multiplexer};
 
 #[apply(entry_point)]
 fn app_main(mut ctx: Context) {
     use env_logger::Env;
     env_logger::Builder::from_env(Env::default().default_filter_or("debug")).init();
-    let rt = runtime::Builder::new_current_thread().build().unwrap();
-    rt.block_on(async_main(ctx));
+    block_on(async_main(ctx));
 }
 
-async fn async_main(mut ctx: Context) {
+async fn async_main(mut ctx: Context) -> ! {
     log::info!("start");
-    let devices = (0..7)
-        .into_iter()
-        .map(|addr| (addr, Device::new(addr, &mut ctx)))
-        .collect::<HashMap<_, _>>();
-    for (addr, _device) in devices.iter() {
-        log::info!("device: addr {}", addr);
+    let rt = runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let mut mux = Multiplexer::new(());
+    for addr in 0..7 {
+        let dev = Device::new(addr, &mut ctx, mux.add_client(addr).unwrap());
+        rt.spawn(dev.run());
     }
-    log::info!("stop");
+    assert!(ctx.registry.is_empty());
+    rt.block_on(mux.run())
 }
