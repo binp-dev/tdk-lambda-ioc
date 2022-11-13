@@ -1,6 +1,8 @@
 #![forbid(unsafe_code)]
 
 mod device;
+#[cfg(feature = "emulate")]
+mod emulator;
 mod serial;
 
 /// *Export symbols being called from IOC.*
@@ -26,8 +28,11 @@ async fn async_main(mut ctx: Context) -> ! {
         .enable_all()
         .build()
         .unwrap();
-    let mut mux = Multiplexer::new(());
-    for addr in 0..7 {
+    let addrs = 0..7;
+    let (emu, port) = emulator::Emulator::new(addrs.clone());
+    rt.spawn(emu.run());
+    let mut mux = Multiplexer::new(port);
+    for addr in addrs {
         let dev = Device::new(addr, &mut ctx, mux.add_client(addr).unwrap());
         rt.spawn(dev.run());
     }

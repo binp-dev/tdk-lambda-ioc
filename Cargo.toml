@@ -10,15 +10,26 @@ name = "backend"
 crate-type = ["cdylib"]
 path = "src/lib.rs"
 
+[features]
+default = ["emulate"]
+emulate = ["async-ringbuf"]
+
 [dependencies]
 ferrite = { package = "ferrite-core", path = "ferrite-rs" }
 futures = "0.3.25"
-tokio = { version = "1.21.2", features = ["rt", "sync", "macros", "time"] }
+tokio = { version = "1.21.2", features = [
+    "rt",
+    "sync",
+    "macros",
+    "time",
+    "io-util",
+] }
 tokio-serial = "5.4.4"
 request-channel = { git = "https://github.com/agerasev/request-channel.git" }
 log = "0.4"
 env_logger = "0.9.1"
 macro_rules_attribute = "0.1.2"
+async-ringbuf = { path = "/home/agerasev/develop/my/async-ringbuf", optional = true }
 
 [workspace]
 members = ["ferrite-rs"]

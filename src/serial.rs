@@ -1,21 +1,19 @@
 use request_channel::{channel, Requester, Responder};
 use std::{
-    collections::{
-        hash_map::{Entry, HashMap},
-        VecDeque,
-    },
+    collections::hash_map::{Entry, HashMap},
     sync::Arc,
-    time::Duration,
 };
-use tokio::{select, sync::Notify, time::sleep};
-//use tokio_serial::SerialStream;
-
-// Temporary placeholder.
-type SerialStream = ();
+use tokio::{
+    io::{split, AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader},
+    select,
+    sync::Notify,
+};
 
 pub type Addr = u8;
 pub type Cmd = Vec<u8>;
 pub type CmdRes = Vec<u8>;
+
+pub const LINE_TERM: u8 = b'\r';
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Priority {
@@ -75,15 +73,15 @@ struct Client {
     intr: Interrupt,
 }
 
-pub struct Multiplexer {
-    port: SerialStream,
+pub struct Multiplexer<Port: AsyncRead + AsyncWrite> {
+    port: Port,
     clients: HashMap<Addr, Client>,
     imm: Responder<ImmTx, Rx>,
     imm_req: Arc<Requester<ImmTx, Rx>>,
 }
 
-impl Multiplexer {
-    pub fn new(port: SerialStream) -> Self {
+impl<Port: AsyncRead + AsyncWrite> Multiplexer<Port> {
+    pub fn new(port: Port) -> Self {
         let (req, resp) = channel::<ImmTx, Rx>();
         Self {
             port,
@@ -120,7 +118,15 @@ impl Multiplexer {
             addrs.sort();
             addrs.into_iter().cycle()
         };
+        let (mut reader, mut writer) = {
+            let (r, w) = split(self.port);
+            let br = BufReader::new(r);
+            (br, w)
+        };
+        let mut buf = Vec::new();
+
         let mut current = sched.next().unwrap();
+        let mut active = None;
         loop {
             let (addr, cmd, r) = select! {
                 imm = self.imm.next() => {
@@ -138,9 +144,29 @@ impl Multiplexer {
                     }
                 },
             };
-            log::info!("{}: {}", addr, String::from_utf8_lossy(&cmd));
-            sleep(Duration::from_millis(100)).await;
-            r.respond(Vec::new());
+
+            if !active.map(|a| addr == a).unwrap_or(false) {
+                writer
+                    .write_all(format!("ADR {}", addr).as_bytes())
+                    .await
+                    .unwrap();
+                writer.write_u8(LINE_TERM).await.unwrap();
+
+                buf.clear();
+                reader.read_until(LINE_TERM, &mut buf).await.unwrap();
+                assert_eq!(buf.pop().unwrap(), LINE_TERM);
+                assert_eq!(buf, b"OK");
+                active.replace(addr);
+            }
+
+            writer.write_all(&cmd).await.unwrap();
+            writer.write_u8(LINE_TERM).await.unwrap();
+
+            buf.clear();
+            reader.read_until(LINE_TERM, &mut buf).await.unwrap();
+            assert_eq!(buf.pop().unwrap(), LINE_TERM);
+
+            r.respond(buf.clone());
         }
     }
 }

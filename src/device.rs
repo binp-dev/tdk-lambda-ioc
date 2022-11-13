@@ -57,10 +57,16 @@ impl Device {
 
     pub async fn run(self) -> ! {
         loop {
-            self.serial
-                .req
-                .run(Vec::from("DVC?".as_bytes()), Priority::Queued)
-                .await;
+            log::info!(
+                "IDN?: {}",
+                String::from_utf8(
+                    self.serial
+                        .req
+                        .run(Vec::from("IDN?".as_bytes()), Priority::Queued)
+                        .await
+                )
+                .unwrap(),
+            );
             self.serial.req.yield_();
         }
     }
