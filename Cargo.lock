@@ -105,20 +105,21 @@ dependencies = [
 [[package]]
 name = "async-ringbuf"
 version = "0.1.0"
-dependencies = [
- "futures",
- "ringbuf",
- "tokio",
-]
-
-[[package]]
-name = "async-ringbuf"
-version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b1a68f59d23a9418de9fbfa3f62c5c49b2955a341470dafbf23d539a8b5acd71"
 dependencies = [
  "futures",
  "ringbuf",
+]
+
+[[package]]
+name = "async-ringbuf"
+version = "0.1.1"
+source = "git+https://github.com/agerasev/async-ringbuf.git#26b24457e8edc258dec8ea147f8717f01da46972"
+dependencies = [
+ "futures",
+ "ringbuf",
+ "tokio",
 ]
 
 [[package]]
@@ -306,7 +307,7 @@ dependencies = [
 name = "ferrite-core"
 version = "0.1.0"
 dependencies = [
- "async-ringbuf 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "async-ringbuf 0.1.0",
  "async-std",
  "atomic_enum",
  "bitflags",
@@ -759,7 +760,7 @@ dependencies = [
 name = "tdk-lambda-ioc"
 version = "0.1.0"
 dependencies = [
- "async-ringbuf 0.1.0",
+ "async-ringbuf 0.1.1",
  "env_logger",
  "ferrite-core",
  "futures",

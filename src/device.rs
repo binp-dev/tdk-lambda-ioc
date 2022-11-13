@@ -1,5 +1,7 @@
 use crate::serial::{Handle, Priority};
 use ferrite::*;
+use std::sync::Arc;
+use tokio::{join, runtime};
 
 struct Vars {
     pub ser_numb: ArrayVariable<u8, false, true, true>,
@@ -42,7 +44,7 @@ impl Vars {
 pub struct Device {
     addr: u8,
     vars: Vars,
-    serial: Handle,
+    serial: Arc<Handle>,
 }
 
 impl Device {
@@ -50,23 +52,101 @@ impl Device {
         let prefix = format!("PS{}:", addr);
         Self {
             addr,
-            serial,
+            serial: Arc::new(serial),
             vars: Vars::new(&prefix, epics),
         }
     }
 
-    pub async fn run(self) -> ! {
+    pub async fn run(mut self) -> ! {
+        let rt = runtime::Handle::current();
+
+        log::info!("PS{}: Initialize", self.addr);
+
+        join!(
+            async {
+                let sn = self
+                    .serial
+                    .req
+                    .run(Vec::from("SN?".as_bytes()), Priority::Queued)
+                    .await;
+
+                let mut var = self.vars.ser_numb.request().await.write();
+                var.extend(sn);
+                var.commit().await;
+            },
+            async {
+                let res = self
+                    .serial
+                    .req
+                    .run(Vec::from("PV?".as_bytes()), Priority::Queued)
+                    .await;
+
+                let volt = std::str::from_utf8(&res).unwrap().parse::<f64>().unwrap();
+                self.vars.volt_set.wait().await.write(volt).await;
+            },
+            async {
+                let res = self
+                    .serial
+                    .req
+                    .run(Vec::from("PC?".as_bytes()), Priority::Queued)
+                    .await;
+
+                let curr = std::str::from_utf8(&res).unwrap().parse::<f64>().unwrap();
+                self.vars.curr_set.wait().await.write(curr).await;
+            }
+        );
+        self.serial.req.yield_();
+
+        log::info!("PS{}: Start monitors", self.addr);
+
+        let ser = self.serial.clone();
+        rt.spawn(async move {
+            loop {
+                let volt = self.vars.volt_set.wait().await.read().await;
+                assert_eq!(
+                    ser.req
+                        .run(format!("PV {}", volt).into_bytes(), Priority::Immediate)
+                        .await,
+                    b"OK"
+                );
+            }
+        });
+        let ser = self.serial.clone();
+        rt.spawn(async move {
+            loop {
+                let curr = self.vars.curr_set.wait().await.read().await;
+                assert_eq!(
+                    ser.req
+                        .run(format!("PC {}", curr).into_bytes(), Priority::Immediate)
+                        .await,
+                    b"OK"
+                );
+            }
+        });
+
+        log::info!("PS{}: Start scan loop", self.addr);
+
         loop {
-            log::info!(
-                "IDN?: {}",
-                String::from_utf8(
-                    self.serial
-                        .req
-                        .run(Vec::from("IDN?".as_bytes()), Priority::Queued)
-                        .await
-                )
-                .unwrap(),
-            );
+            {
+                let res = self
+                    .serial
+                    .req
+                    .run(Vec::from("MV?".as_bytes()), Priority::Queued)
+                    .await;
+
+                let volt = std::str::from_utf8(&res).unwrap().parse::<f64>().unwrap();
+                self.vars.volt_real.request().await.write(volt).await;
+            }
+            {
+                let res = self
+                    .serial
+                    .req
+                    .run(Vec::from("MC?".as_bytes()), Priority::Queued)
+                    .await;
+
+                let curr = std::str::from_utf8(&res).unwrap().parse::<f64>().unwrap();
+                self.vars.curr_real.request().await.write(curr).await;
+            }
             self.serial.req.yield_();
         }
     }

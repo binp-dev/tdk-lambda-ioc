@@ -21,13 +21,13 @@ record(ai, "PS$(UNIT_ADR):curr_real") {
 
 record(ao, "PS$(UNIT_ADR):over_volt_set_point") {
 	field(DTYP, "ferrite")
-	field(SCAN, "I/O Intr")
+	field(PINI, "YES")
 	field(EGU, "V")
 }
 
 record(ao, "PS$(UNIT_ADR):under_volt_set_point") {
 	field(DTYP, "ferrite")
-	field(SCAN, "I/O Intr")
+	field(PINI, "YES")
 	field(EGU, "V")
 }
 
@@ -35,12 +35,12 @@ record(ao, "PS$(UNIT_ADR):under_volt_set_point") {
 
 record(ao, "PS$(UNIT_ADR):volt_set") {
 	field(DTYP, "ferrite")
-	field(SCAN, "I/O Intr")
+	field(PINI, "YES")
 	field(EGU, "V")
 }
 
 record(ao, "PS$(UNIT_ADR):curr_set") {
 	field(DTYP, "ferrite")
-	field(SCAN, "I/O Intr")
+	field(PINI, "YES")
 	field(EGU, "A")
 }

@@ -6,6 +6,7 @@ use std::{
     io,
     pin::Pin,
     str::FromStr,
+    string::ToString,
     sync::Arc,
     task::{Context, Poll},
     time::Duration,
@@ -66,6 +67,10 @@ impl Emulator {
         self.writer.write_all(&[LINE_TERM]).await.unwrap();
     }
 
+    fn dev(&mut self, addr: Addr) -> &mut Device {
+        self.devs.get_mut(&addr).unwrap()
+    }
+
     pub async fn run(mut self) -> ! {
         let mut addr = None;
         let mut buf = Vec::new();
@@ -84,22 +89,48 @@ impl Emulator {
                 assert!(self.devs.contains_key(addr.as_ref().unwrap()));
                 self.send(b"OK").await;
             } else {
-                assert!(addr.is_some());
-                if name == b"IDN?" {
-                    self.send(b"TDK-Lambda Emulator").await;
-                } else {
-                    panic!("Unknown command");
+                let addr = *addr.as_ref().unwrap();
+                match name {
+                    b"IDN?" => {
+                        self.send(b"TDK-Lambda Emulator").await;
+                    }
+                    b"SN?" => {
+                        self.send(format!("Emu-{}", addr).as_bytes()).await;
+                    }
+                    b"PC" => {
+                        self.dev(addr).current = parse_bytes(args[0]);
+                        self.send(b"OK").await;
+                    }
+                    b"PC?" | b"MC?" => {
+                        let value = self.dev(addr).current;
+                        self.send(&to_bytes(value)).await;
+                    }
+                    b"PV" => {
+                        self.dev(addr).voltage = parse_bytes(args[0]);
+                        self.send(b"OK").await;
+                    }
+                    b"PV?" | b"MV?" => {
+                        let value = self.dev(addr).voltage;
+                        self.send(&to_bytes(value)).await;
+                    }
+                    _ => {
+                        panic!("Unknown command {}", String::from_utf8_lossy(name));
+                    }
                 }
             }
         }
     }
 }
 
-pub fn parse_bytes<F: FromStr>(bytes: &[u8]) -> F
+pub fn parse_bytes<T: FromStr>(bytes: &[u8]) -> T
 where
-    F::Err: Debug,
+    T::Err: Debug,
 {
     std::str::from_utf8(bytes).unwrap().parse().unwrap()
+}
+
+pub fn to_bytes<T: ToString>(x: T) -> Vec<u8> {
+    x.to_string().into_bytes()
 }
 
 struct Device {

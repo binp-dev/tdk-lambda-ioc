@@ -29,7 +29,9 @@ request-channel = { git = "https://github.com/agerasev/request-channel.git" }
 log = "0.4"
 env_logger = "0.9.1"
 macro_rules_attribute = "0.1.2"
-async-ringbuf = { path = "/home/agerasev/develop/my/async-ringbuf", optional = true }
+async-ringbuf = { git = "https://github.com/agerasev/async-ringbuf.git", features = [
+    "impl-tokio",
+], optional = true }
 
 [workspace]
 members = ["ferrite-rs"]
