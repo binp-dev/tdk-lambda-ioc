@@ -32,6 +32,7 @@ macro_rules_attribute = "0.1.2"
 async-ringbuf = { git = "https://github.com/agerasev/async-ringbuf.git", features = [
     "impl-tokio",
 ], optional = true }
+thiserror = "1.0.37"
 
 [workspace]
 members = ["ferrite-rs"]

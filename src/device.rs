@@ -1,4 +1,7 @@
-use crate::serial::{Handle, Priority};
+use crate::{
+    serial::{Handle, Priority},
+    utils::prelude::*,
+};
 use ferrite::*;
 use std::sync::Arc;
 use tokio::{join, runtime};
@@ -64,35 +67,37 @@ impl Device {
 
         join!(
             async {
-                let sn = self
+                let value = self
                     .serial
                     .req
                     .run(Vec::from("SN?".as_bytes()), Priority::Queued)
                     .await;
-
-                let mut var = self.vars.ser_numb.request().await.write();
-                var.extend(sn);
-                var.commit().await;
+                self.vars
+                    .ser_numb
+                    .request()
+                    .await
+                    .write_from_slice(&value)
+                    .await;
             },
             async {
-                let res = self
+                let value = self
                     .serial
                     .req
                     .run(Vec::from("PV?".as_bytes()), Priority::Queued)
-                    .await;
-
-                let volt = std::str::from_utf8(&res).unwrap().parse::<f64>().unwrap();
-                self.vars.volt_set.wait().await.write(volt).await;
+                    .await
+                    .parse_bytes::<f64>()
+                    .unwrap();
+                self.vars.volt_set.try_acquire().unwrap().write(value).await;
             },
             async {
-                let res = self
+                let value = self
                     .serial
                     .req
                     .run(Vec::from("PC?".as_bytes()), Priority::Queued)
-                    .await;
-
-                let curr = std::str::from_utf8(&res).unwrap().parse::<f64>().unwrap();
-                self.vars.curr_set.wait().await.write(curr).await;
+                    .await
+                    .parse_bytes::<f64>()
+                    .unwrap();
+                self.vars.curr_set.try_acquire().unwrap().write(value).await;
             }
         );
         self.serial.req.yield_();
@@ -102,10 +107,10 @@ impl Device {
         let ser = self.serial.clone();
         rt.spawn(async move {
             loop {
-                let volt = self.vars.volt_set.wait().await.read().await;
+                let value = self.vars.volt_set.acquire().await.read().await;
                 assert_eq!(
                     ser.req
-                        .run(format!("PV {}", volt).into_bytes(), Priority::Immediate)
+                        .run(format!("PV {}", value).into_bytes(), Priority::Immediate)
                         .await,
                     b"OK"
                 );
@@ -114,10 +119,10 @@ impl Device {
         let ser = self.serial.clone();
         rt.spawn(async move {
             loop {
-                let curr = self.vars.curr_set.wait().await.read().await;
+                let value = self.vars.curr_set.acquire().await.read().await;
                 assert_eq!(
                     ser.req
-                        .run(format!("PC {}", curr).into_bytes(), Priority::Immediate)
+                        .run(format!("PC {}", value).into_bytes(), Priority::Immediate)
                         .await,
                     b"OK"
                 );
@@ -128,24 +133,24 @@ impl Device {
 
         loop {
             {
-                let res = self
+                let value = self
                     .serial
                     .req
                     .run(Vec::from("MV?".as_bytes()), Priority::Queued)
-                    .await;
-
-                let volt = std::str::from_utf8(&res).unwrap().parse::<f64>().unwrap();
-                self.vars.volt_real.request().await.write(volt).await;
+                    .await
+                    .parse_bytes::<f64>()
+                    .unwrap();
+                self.vars.volt_real.request().await.write(value).await;
             }
             {
-                let res = self
+                let value = self
                     .serial
                     .req
                     .run(Vec::from("MC?".as_bytes()), Priority::Queued)
-                    .await;
-
-                let curr = std::str::from_utf8(&res).unwrap().parse::<f64>().unwrap();
-                self.vars.curr_real.request().await.write(curr).await;
+                    .await
+                    .parse_bytes::<f64>()
+                    .unwrap();
+                self.vars.curr_real.request().await.write(value).await;
             }
             self.serial.req.yield_();
         }

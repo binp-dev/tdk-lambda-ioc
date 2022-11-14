@@ -2,11 +2,8 @@ use async_ringbuf::{AsyncConsumer, AsyncHeapRb, AsyncProducer};
 use futures::{AsyncBufReadExt, AsyncWriteExt};
 use std::{
     collections::HashMap,
-    fmt::Debug,
     io,
     pin::Pin,
-    str::FromStr,
-    string::ToString,
     sync::Arc,
     task::{Context, Poll},
     time::Duration,
@@ -16,7 +13,10 @@ use tokio::{
     time::sleep,
 };
 
-use crate::serial::{Addr, LINE_TERM};
+use crate::{
+    serial::{Addr, LINE_TERM},
+    utils::prelude::*,
+};
 
 type Pipe = AsyncHeapRb<u8>;
 type Writer = AsyncProducer<u8, Arc<Pipe>>;
@@ -55,14 +55,12 @@ impl Emulator {
             self.reader.read_until(LINE_TERM, buf).await.unwrap();
             assert!(buf.pop().unwrap() == LINE_TERM);
             if !buf.is_empty() {
-                log::debug!("-> {}", String::from_utf8_lossy(buf));
                 break;
             }
         }
     }
 
     async fn send(&mut self, msg: &[u8]) {
-        log::debug!("<- {}", String::from_utf8_lossy(msg));
         self.writer.write_all(msg).await.unwrap();
         self.writer.write_all(&[LINE_TERM]).await.unwrap();
     }
@@ -85,7 +83,7 @@ impl Emulator {
 
             if name == b"ADR" {
                 assert_eq!(args.len(), 1);
-                addr = Some(parse_bytes(args[0]));
+                addr = Some(args[0].parse_bytes().unwrap());
                 assert!(self.devs.contains_key(addr.as_ref().unwrap()));
                 self.send(b"OK").await;
             } else {
@@ -98,20 +96,20 @@ impl Emulator {
                         self.send(format!("Emu-{}", addr).as_bytes()).await;
                     }
                     b"PC" => {
-                        self.dev(addr).current = parse_bytes(args[0]);
+                        self.dev(addr).current = args[0].parse_bytes().unwrap();
                         self.send(b"OK").await;
                     }
                     b"PC?" | b"MC?" => {
                         let value = self.dev(addr).current;
-                        self.send(&to_bytes(value)).await;
+                        self.send(&value.to_bytes()).await;
                     }
                     b"PV" => {
-                        self.dev(addr).voltage = parse_bytes(args[0]);
+                        self.dev(addr).voltage = args[0].parse_bytes().unwrap();
                         self.send(b"OK").await;
                     }
                     b"PV?" | b"MV?" => {
                         let value = self.dev(addr).voltage;
-                        self.send(&to_bytes(value)).await;
+                        self.send(&value.to_bytes()).await;
                     }
                     _ => {
                         panic!("Unknown command {}", String::from_utf8_lossy(name));
@@ -120,17 +118,6 @@ impl Emulator {
             }
         }
     }
-}
-
-pub fn parse_bytes<T: FromStr>(bytes: &[u8]) -> T
-where
-    T::Err: Debug,
-{
-    std::str::from_utf8(bytes).unwrap().parse().unwrap()
-}
-
-pub fn to_bytes<T: ToString>(x: T) -> Vec<u8> {
-    x.to_string().into_bytes()
 }
 
 struct Device {

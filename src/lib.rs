@@ -4,6 +4,7 @@ mod device;
 #[cfg(feature = "emulate")]
 mod emulator;
 mod serial;
+mod utils;
 
 /// *Export symbols being called from IOC.*
 pub use ferrite::export;

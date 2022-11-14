@@ -146,24 +146,26 @@ impl<Port: AsyncRead + AsyncWrite> Multiplexer<Port> {
             };
 
             if !active.map(|a| addr == a).unwrap_or(false) {
-                writer
-                    .write_all(format!("ADR {}", addr).as_bytes())
-                    .await
-                    .unwrap();
+                let msg = format!("ADR {}", addr);
+                log::debug!("-> {}", msg);
+                writer.write_all(msg.as_bytes()).await.unwrap();
                 writer.write_u8(LINE_TERM).await.unwrap();
 
                 buf.clear();
                 reader.read_until(LINE_TERM, &mut buf).await.unwrap();
                 assert_eq!(buf.pop().unwrap(), LINE_TERM);
+                log::debug!("<- {}", String::from_utf8_lossy(&buf));
                 assert_eq!(buf, b"OK");
                 active.replace(addr);
             }
 
             writer.write_all(&cmd).await.unwrap();
+            log::debug!("-> {}", String::from_utf8_lossy(&cmd));
             writer.write_u8(LINE_TERM).await.unwrap();
 
             buf.clear();
             reader.read_until(LINE_TERM, &mut buf).await.unwrap();
+            log::debug!("<- {}", String::from_utf8_lossy(&buf));
             assert_eq!(buf.pop().unwrap(), LINE_TERM);
 
             r.respond(buf.clone());
