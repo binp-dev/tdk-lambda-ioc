@@ -20,95 +20,104 @@
     <name>$(PS)</name>
     <width>800</width>
     <height>100</height>
-  </widget>
-  <widget type="label" version="2.0.0">
-    <name>Label_4</name>
-    <text>Overvoltage limit</text>
-    <x>390</x>
-    <y>30</y>
-    <width>140</width>
-  </widget>
-  <widget type="label" version="2.0.0">
-    <name>Label_5</name>
-    <text>Undervoltage limit</text>
-    <x>390</x>
-    <y>60</y>
-    <width>140</width>
-  </widget>
-  <widget type="spinner" version="2.0.0">
-    <name>Spinner</name>
-    <pv_name>$(PS):over_volt_set_point</pv_name>
-    <x>520</x>
-    <y>30</y>
-    <precision>3</precision>
-    <show_units>true</show_units>
-    <maximum>1000.0</maximum>
-  </widget>
-  <widget type="spinner" version="2.0.0">
-    <name>Spinner_1</name>
-    <pv_name>$(PS):under_volt_set_point</pv_name>
-    <x>520</x>
-    <y>60</y>
-    <precision>3</precision>
-    <show_units>true</show_units>
-    <maximum>1000.0</maximum>
-  </widget>
-  <widget type="label" version="2.0.0">
-    <name>Label_2</name>
-    <text>Voltage real</text>
-    <x>20</x>
-    <y>30</y>
-  </widget>
-  <widget type="textupdate" version="2.0.0">
-    <name>Text Update_1</name>
-    <pv_name>$(PS):volt_real</pv_name>
-    <x>242</x>
-    <y>30</y>
-    <format>1</format>
-    <precision>3</precision>
-  </widget>
-  <widget type="label" version="2.0.0">
-    <name>Label_3</name>
-    <text>Current real</text>
-    <x>20</x>
-    <y>60</y>
-  </widget>
-  <widget type="textupdate" version="2.0.0">
-    <name>Text Update_2</name>
-    <pv_name>$(PS):curr_real</pv_name>
-    <x>242</x>
-    <y>60</y>
-    <format>1</format>
-    <precision>3</precision>
-  </widget>
-  <widget type="spinner" version="2.0.0">
-    <name>Spinner_2</name>
-    <pv_name>$(PS):volt_set</pv_name>
-    <x>122</x>
-    <y>30</y>
-    <precision>3</precision>
-    <show_units>true</show_units>
-    <maximum>1000.0</maximum>
-  </widget>
-  <widget type="spinner" version="2.0.0">
-    <name>Spinner_3</name>
-    <pv_name>$(PS):curr_set</pv_name>
-    <x>122</x>
-    <y>60</y>
-    <precision>3</precision>
-    <show_units>true</show_units>
-  </widget>
-  <widget type="textupdate" version="2.0.0">
-    <name>Text Update</name>
-    <pv_name>$(PS):ser_numb</pv_name>
-    <x>680</x>
-    <y>60</y>
-    <format>6</format>
-  </widget>
-  <widget type="label" version="2.0.0">
-    <name>Label_1</name>
-    <text>Serial number</text>
-    <x>680</x>
-    <y>30</y>
+    <widget type="spinner" version="2.0.0">
+      <name>Spinner_2</name>
+      <pv_name>$(PS):volt_set</pv_name>
+      <x>62</x>
+      <y>12</y>
+      <precision>3</precision>
+      <show_units>true</show_units>
+      <maximum>1000.0</maximum>
+    </widget>
+    <widget type="spinner" version="2.0.0">
+      <name>Spinner_3</name>
+      <pv_name>$(PS):curr_set</pv_name>
+      <x>62</x>
+      <y>42</y>
+      <precision>3</precision>
+      <show_units>true</show_units>
+    </widget>
+    <widget type="textupdate" version="2.0.0">
+      <name>Text Update_1</name>
+      <pv_name>$(PS):volt_real</pv_name>
+      <x>172</x>
+      <y>12</y>
+      <format>1</format>
+      <precision>3</precision>
+    </widget>
+    <widget type="textupdate" version="2.0.0">
+      <name>Text Update_2</name>
+      <pv_name>$(PS):curr_real</pv_name>
+      <x>172</x>
+      <y>42</y>
+      <format>1</format>
+      <precision>3</precision>
+    </widget>
+    <widget type="spinner" version="2.0.0">
+      <name>Spinner</name>
+      <pv_name>$(PS):over_volt_set_point</pv_name>
+      <x>422</x>
+      <y>12</y>
+      <precision>3</precision>
+      <show_units>true</show_units>
+      <maximum>1000.0</maximum>
+    </widget>
+    <widget type="label" version="2.0.0">
+      <name>Label_4</name>
+      <text>Overvoltage limit</text>
+      <x>302</x>
+      <y>12</y>
+      <width>120</width>
+    </widget>
+    <widget type="label" version="2.0.0">
+      <name>Label_5</name>
+      <text>Undervoltage limit</text>
+      <x>302</x>
+      <y>42</y>
+      <width>120</width>
+    </widget>
+    <widget type="spinner" version="2.0.0">
+      <name>Spinner_1</name>
+      <pv_name>$(PS):under_volt_set_point</pv_name>
+      <x>422</x>
+      <y>42</y>
+      <precision>3</precision>
+      <show_units>true</show_units>
+      <maximum>1000.0</maximum>
+    </widget>
+    <widget type="label" version="2.0.0">
+      <name>Label_3</name>
+      <text>Current</text>
+      <x>2</x>
+      <y>42</y>
+      <width>60</width>
+    </widget>
+    <widget type="label" version="2.0.0">
+      <name>Label_2</name>
+      <text>Voltage</text>
+      <x>2</x>
+      <y>12</y>
+      <width>60</width>
+    </widget>
+    <widget type="bool_button" version="2.0.0">
+      <name>Boolean Button</name>
+      <pv_name>$(PS):out_ena</pv_name>
+      <x>652</x>
+      <y>42</y>
+      <height>20</height>
+    </widget>
+    <widget type="label" version="2.0.0">
+      <name>Label_1</name>
+      <text>Serial number</text>
+      <x>552</x>
+      <y>2</y>
+    </widget>
+    <widget type="textupdate" version="2.0.0">
+      <name>Text Update</name>
+      <pv_name>$(PS):ser_numb</pv_name>
+      <x>652</x>
+      <y>2</y>
+      <format>6</format>
+    </widget>
   </widget>
 </display>

@@ -8,6 +8,7 @@ use tokio::{join, runtime};
 
 struct Vars {
     pub ser_numb: ArrayVariable<u8, false, true, true>,
+    pub out_ena: Variable<u16, true, true, false>,
     pub volt_real: Variable<f64, false, true, true>,
     pub curr_real: Variable<f64, false, true, true>,
     pub over_volt_set_point: Variable<f64, true, true, false>,
@@ -34,6 +35,7 @@ impl Vars {
     pub fn new(prefix: &str, ctx: &mut Context) -> Self {
         Self {
             ser_numb: take_var(ctx, &format!("{}ser_numb", prefix)),
+            out_ena: take_var(ctx, &format!("{}out_ena", prefix)),
             volt_real: take_var(ctx, &format!("{}volt_real", prefix)),
             curr_real: take_var(ctx, &format!("{}curr_real", prefix)),
             over_volt_set_point: take_var(ctx, &format!("{}over_volt_set_point", prefix)),
@@ -83,6 +85,16 @@ impl Device {
                 let value = self
                     .serial
                     .req
+                    .run(Vec::from("OUT?".as_bytes()), Priority::Queued)
+                    .await
+                    .parse_bytes::<u16>()
+                    .unwrap();
+                self.vars.out_ena.try_acquire().unwrap().write(value).await;
+            },
+            async {
+                let value = self
+                    .serial
+                    .req
                     .run(Vec::from("PV?".as_bytes()), Priority::Queued)
                     .await
                     .parse_bytes::<f64>()
@@ -98,12 +110,54 @@ impl Device {
                     .parse_bytes::<f64>()
                     .unwrap();
                 self.vars.curr_set.try_acquire().unwrap().write(value).await;
-            }
+            },
+            async {
+                let value = self
+                    .serial
+                    .req
+                    .run(Vec::from("OVP?".as_bytes()), Priority::Queued)
+                    .await
+                    .parse_bytes::<f64>()
+                    .unwrap();
+                self.vars
+                    .over_volt_set_point
+                    .try_acquire()
+                    .unwrap()
+                    .write(value)
+                    .await;
+            },
+            async {
+                let value = self
+                    .serial
+                    .req
+                    .run(Vec::from("UVL?".as_bytes()), Priority::Queued)
+                    .await
+                    .parse_bytes::<f64>()
+                    .unwrap();
+                self.vars
+                    .under_volt_set_point
+                    .try_acquire()
+                    .unwrap()
+                    .write(value)
+                    .await;
+            },
         );
         self.serial.req.yield_();
 
         log::info!("PS{}: Start monitors", self.addr);
 
+        let ser = self.serial.clone();
+        rt.spawn(async move {
+            loop {
+                let value = self.vars.out_ena.acquire().await.read().await;
+                assert_eq!(
+                    ser.req
+                        .run(format!("OUT {}", value).into_bytes(), Priority::Immediate)
+                        .await,
+                    b"OK"
+                );
+            }
+        });
         let ser = self.serial.clone();
         rt.spawn(async move {
             loop {
@@ -123,6 +177,30 @@ impl Device {
                 assert_eq!(
                     ser.req
                         .run(format!("PC {}", value).into_bytes(), Priority::Immediate)
+                        .await,
+                    b"OK"
+                );
+            }
+        });
+        let ser = self.serial.clone();
+        rt.spawn(async move {
+            loop {
+                let value = self.vars.over_volt_set_point.acquire().await.read().await;
+                assert_eq!(
+                    ser.req
+                        .run(format!("OVP {}", value).into_bytes(), Priority::Immediate)
+                        .await,
+                    b"OK"
+                );
+            }
+        });
+        let ser = self.serial.clone();
+        rt.spawn(async move {
+            loop {
+                let value = self.vars.under_volt_set_point.acquire().await.read().await;
+                assert_eq!(
+                    ser.req
+                        .run(format!("UVL {}", value).into_bytes(), Priority::Immediate)
                         .await,
                     b"OK"
                 );

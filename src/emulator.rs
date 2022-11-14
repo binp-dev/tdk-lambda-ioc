@@ -79,12 +79,13 @@ impl Emulator {
                 (parts.next().unwrap(), parts.collect::<Vec<_>>())
             };
 
-            sleep(Duration::from_millis(100)).await;
+            sleep(Duration::from_millis(10)).await;
 
             if name == b"ADR" {
                 assert_eq!(args.len(), 1);
                 addr = Some(args[0].parse_bytes().unwrap());
                 assert!(self.devs.contains_key(addr.as_ref().unwrap()));
+                sleep(Duration::from_millis(90)).await;
                 self.send(b"OK").await;
             } else {
                 let addr = *addr.as_ref().unwrap();
@@ -95,20 +96,56 @@ impl Emulator {
                     b"SN?" => {
                         self.send(format!("Emu-{}", addr).as_bytes()).await;
                     }
+                    b"OUT" => {
+                        self.dev(addr).out = match args[0] {
+                            b"0" => false,
+                            b"1" => true,
+                            _ => panic!(),
+                        };
+                        self.send(b"OK").await;
+                    }
+                    b"OUT?" => {
+                        let value = self.dev(addr).out as u8;
+                        self.send(&value.to_bytes()).await;
+                    }
                     b"PC" => {
                         self.dev(addr).current = args[0].parse_bytes().unwrap();
                         self.send(b"OK").await;
                     }
-                    b"PC?" | b"MC?" => {
+                    b"PC?" => {
                         let value = self.dev(addr).current;
+                        self.send(&value.to_bytes()).await;
+                    }
+                    b"MC?" => {
+                        let value = self.dev(addr).current();
                         self.send(&value.to_bytes()).await;
                     }
                     b"PV" => {
                         self.dev(addr).voltage = args[0].parse_bytes().unwrap();
                         self.send(b"OK").await;
                     }
-                    b"PV?" | b"MV?" => {
+                    b"PV?" => {
                         let value = self.dev(addr).voltage;
+                        self.send(&value.to_bytes()).await;
+                    }
+                    b"MV?" => {
+                        let value = self.dev(addr).voltage();
+                        self.send(&value.to_bytes()).await;
+                    }
+                    b"OVP" => {
+                        self.dev(addr).over_voltage = args[0].parse_bytes().unwrap();
+                        self.send(b"OK").await;
+                    }
+                    b"OVP?" => {
+                        let value = self.dev(addr).over_voltage;
+                        self.send(&value.to_bytes()).await;
+                    }
+                    b"UVL" => {
+                        self.dev(addr).under_voltage = args[0].parse_bytes().unwrap();
+                        self.send(b"OK").await;
+                    }
+                    b"UVL?" => {
+                        let value = self.dev(addr).under_voltage;
                         self.send(&value.to_bytes()).await;
                     }
                     _ => {
@@ -122,16 +159,37 @@ impl Emulator {
 
 struct Device {
     addr: Addr,
+    out: bool,
     voltage: f64,
     current: f64,
+    over_voltage: f64,
+    under_voltage: f64,
 }
 
 impl Device {
     fn new(addr: Addr) -> Self {
         Self {
             addr,
+            out: false,
             voltage: 0.0,
             current: 0.0,
+            over_voltage: 100.0,
+            under_voltage: 0.0,
+        }
+    }
+
+    fn voltage(&self) -> f64 {
+        if self.out {
+            self.voltage.clamp(self.under_voltage, self.over_voltage)
+        } else {
+            0.0
+        }
+    }
+    fn current(&self) -> f64 {
+        if self.out {
+            self.current
+        } else {
+            0.0
         }
     }
 }

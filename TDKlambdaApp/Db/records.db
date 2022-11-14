@@ -44,3 +44,10 @@ record(ao, "PS$(UNIT_ADR):curr_set") {
 	field(PINI, "YES")
 	field(EGU, "A")
 }
+
+#==================================
+
+record(bo, "PS$(UNIT_ADR):out_ena") {
+	field(DTYP, "ferrite")
+	field(PINI, "YES")
+}
