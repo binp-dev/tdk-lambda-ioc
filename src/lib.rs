@@ -4,7 +4,6 @@ mod device;
 #[cfg(feature = "emulate")]
 mod emulator;
 mod serial;
-mod utils;
 
 /// *Export symbols being called from IOC.*
 pub use ferrite::export;
@@ -19,7 +18,7 @@ use crate::{device::Device, serial::Multiplexer};
 #[apply(entry_point)]
 fn app_main(mut ctx: Context) {
     use env_logger::Env;
-    env_logger::Builder::from_env(Env::default().default_filter_or("debug")).init();
+    env_logger::Builder::from_env(Env::default().default_filter_or("trace")).init();
     block_on(async_main(ctx));
 }
 

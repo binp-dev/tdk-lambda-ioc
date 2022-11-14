@@ -13,10 +13,7 @@ use tokio::{
     time::sleep,
 };
 
-use crate::{
-    serial::{Addr, LINE_TERM},
-    utils::prelude::*,
-};
+use crate::serial::{Addr, LINE_TERM};
 
 type Pipe = AsyncHeapRb<u8>;
 type Writer = AsyncProducer<u8, Arc<Pipe>>;
@@ -49,19 +46,20 @@ impl Emulator {
         )
     }
 
-    async fn recv(&mut self, buf: &mut Vec<u8>) {
+    async fn recv(&mut self) -> String {
+        let mut buf = Vec::new();
         loop {
             buf.clear();
-            self.reader.read_until(LINE_TERM, buf).await.unwrap();
+            self.reader.read_until(LINE_TERM, &mut buf).await.unwrap();
             assert!(buf.pop().unwrap() == LINE_TERM);
             if !buf.is_empty() {
-                break;
+                break String::from_utf8(buf).unwrap();
             }
         }
     }
 
-    async fn send(&mut self, msg: &[u8]) {
-        self.writer.write_all(msg).await.unwrap();
+    async fn send(&mut self, msg: &str) {
+        self.writer.write_all(msg.as_bytes()).await.unwrap();
         self.writer.write_all(&[LINE_TERM]).await.unwrap();
     }
 
@@ -71,85 +69,84 @@ impl Emulator {
 
     pub async fn run(mut self) -> ! {
         let mut addr = None;
-        let mut buf = Vec::new();
         loop {
-            self.recv(&mut buf).await;
+            let cmd = self.recv().await;
             let (name, args) = {
-                let mut parts = buf.split(|b| *b == b' ');
+                let mut parts = cmd.split(' ');
                 (parts.next().unwrap(), parts.collect::<Vec<_>>())
             };
 
             sleep(Duration::from_millis(10)).await;
 
-            if name == b"ADR" {
+            if name == "ADR" {
                 assert_eq!(args.len(), 1);
-                addr = Some(args[0].parse_bytes().unwrap());
+                addr = Some(args[0].parse().unwrap());
                 assert!(self.devs.contains_key(addr.as_ref().unwrap()));
                 sleep(Duration::from_millis(90)).await;
-                self.send(b"OK").await;
+                self.send("OK").await;
             } else {
                 let addr = *addr.as_ref().unwrap();
                 match name {
-                    b"IDN?" => {
-                        self.send(b"TDK-Lambda Emulator").await;
+                    "IDN?" => {
+                        self.send("TDK-Lambda Emulator").await;
                     }
-                    b"SN?" => {
-                        self.send(format!("Emu-{}", addr).as_bytes()).await;
+                    "SN?" => {
+                        self.send(&format!("Emu-{}", addr)).await;
                     }
-                    b"OUT" => {
+                    "OUT" => {
                         self.dev(addr).out = match args[0] {
-                            b"0" => false,
-                            b"1" => true,
+                            "0" => false,
+                            "1" => true,
                             _ => panic!(),
                         };
-                        self.send(b"OK").await;
+                        self.send("OK").await;
                     }
-                    b"OUT?" => {
+                    "OUT?" => {
                         let value = self.dev(addr).out as u8;
-                        self.send(&value.to_bytes()).await;
+                        self.send(&value.to_string()).await;
                     }
-                    b"PC" => {
-                        self.dev(addr).current = args[0].parse_bytes().unwrap();
-                        self.send(b"OK").await;
+                    "PC" => {
+                        self.dev(addr).current = args[0].parse().unwrap();
+                        self.send("OK").await;
                     }
-                    b"PC?" => {
+                    "PC?" => {
                         let value = self.dev(addr).current;
-                        self.send(&value.to_bytes()).await;
+                        self.send(&value.to_string()).await;
                     }
-                    b"MC?" => {
+                    "MC?" => {
                         let value = self.dev(addr).current();
-                        self.send(&value.to_bytes()).await;
+                        self.send(&value.to_string()).await;
                     }
-                    b"PV" => {
-                        self.dev(addr).voltage = args[0].parse_bytes().unwrap();
-                        self.send(b"OK").await;
+                    "PV" => {
+                        self.dev(addr).voltage = args[0].parse().unwrap();
+                        self.send("OK").await;
                     }
-                    b"PV?" => {
+                    "PV?" => {
                         let value = self.dev(addr).voltage;
-                        self.send(&value.to_bytes()).await;
+                        self.send(&value.to_string()).await;
                     }
-                    b"MV?" => {
+                    "MV?" => {
                         let value = self.dev(addr).voltage();
-                        self.send(&value.to_bytes()).await;
+                        self.send(&value.to_string()).await;
                     }
-                    b"OVP" => {
-                        self.dev(addr).over_voltage = args[0].parse_bytes().unwrap();
-                        self.send(b"OK").await;
+                    "OVP" => {
+                        self.dev(addr).over_voltage = args[0].parse().unwrap();
+                        self.send("OK").await;
                     }
-                    b"OVP?" => {
+                    "OVP?" => {
                         let value = self.dev(addr).over_voltage;
-                        self.send(&value.to_bytes()).await;
+                        self.send(&value.to_string()).await;
                     }
-                    b"UVL" => {
-                        self.dev(addr).under_voltage = args[0].parse_bytes().unwrap();
-                        self.send(b"OK").await;
+                    "UVL" => {
+                        self.dev(addr).under_voltage = args[0].parse().unwrap();
+                        self.send("OK").await;
                     }
-                    b"UVL?" => {
+                    "UVL?" => {
                         let value = self.dev(addr).under_voltage;
-                        self.send(&value.to_bytes()).await;
+                        self.send(&value.to_string()).await;
                     }
                     _ => {
-                        panic!("Unknown command {}", String::from_utf8_lossy(name));
+                        panic!("Unknown command name: {}", name);
                     }
                 }
             }
