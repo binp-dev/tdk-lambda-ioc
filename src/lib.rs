@@ -1,7 +1,12 @@
 #![forbid(unsafe_code)]
 
+#[cfg(not(any(feature = "real", feature = "emul")))]
+compile_error!("You need to enable either 'real' or 'emul' feature.");
+#[cfg(all(feature = "real", feature = "emul"))]
+compile_error!("Features 'real' and 'emul' cannot be enabled both at once.");
+
 mod device;
-#[cfg(feature = "emulate")]
+#[cfg(feature = "emul")]
 mod emulator;
 mod serial;
 
@@ -30,13 +35,13 @@ async fn async_main(mut ctx: Context) -> ! {
         .unwrap();
     let _guard = rt.enter();
     let addrs = 0..7;
-    #[cfg(feature = "emulate")]
+    #[cfg(feature = "emul")]
     let port = {
         let (emu, port) = emulator::Emulator::new(addrs.clone());
         rt.spawn(emu.run());
         port
     };
-    #[cfg(not(feature = "emulate"))]
+    #[cfg(feature = "real")]
     let port = {
         use tokio_serial::SerialPortBuilderExt;
         tokio_serial::new("/dev/ttyUSB0", 19200)

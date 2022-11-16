@@ -9,3 +9,7 @@
 
 # Added by cargo
 /target
+
+# VSCode
+.vscode/
+*.code-workspace

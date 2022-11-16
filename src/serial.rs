@@ -1,12 +1,19 @@
-use request_channel::{channel, Requester, Responder};
+use pin_project::pin_project;
+use request_channel::{channel as request_channel, Requester, Responder};
 use std::{
-    collections::hash_map::{Entry, HashMap},
+    collections::{hash_map::Entry, HashMap},
+    io,
+    pin::Pin,
     sync::Arc,
+    task::{Context, Poll},
 };
 use tokio::{
-    io::{split, AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader},
-    select,
-    sync::Notify,
+    io::{split, AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader, ReadBuf},
+    runtime, select,
+    sync::{
+        mpsc::{unbounded_channel as channel, UnboundedSender as Sender},
+        Notify,
+    },
 };
 
 pub type Addr = u8;
@@ -14,6 +21,14 @@ pub type Cmd = String;
 pub type CmdRes = String;
 
 pub const LINE_TERM: u8 = b'\r';
+
+fn byte_is_intr(b: u8) -> Option<Addr> {
+    if b >= 0x80 {
+        Some(b - 0x80)
+    } else {
+        None
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Priority {
@@ -82,7 +97,7 @@ pub struct Multiplexer<Port: AsyncRead + AsyncWrite> {
 
 impl<Port: AsyncRead + AsyncWrite> Multiplexer<Port> {
     pub fn new(port: Port) -> Self {
-        let (req, resp) = channel::<ImmTx, Rx>();
+        let (req, resp) = request_channel::<ImmTx, Rx>();
         Self {
             port,
             imm: resp,
@@ -96,7 +111,7 @@ impl<Port: AsyncRead + AsyncWrite> Multiplexer<Port> {
             Entry::Vacant(vacant) => vacant,
             Entry::Occupied(..) => return None,
         };
-        let (req, resp) = channel::<QueTx, Rx>();
+        let (req, resp) = request_channel::<QueTx, Rx>();
         let intr = Arc::new(Notify::new());
         vacant.insert(Client {
             resp,
@@ -113,18 +128,34 @@ impl<Port: AsyncRead + AsyncWrite> Multiplexer<Port> {
     }
 
     pub async fn run(mut self) -> ! {
+        let (mut clients, client_intrs): (HashMap<_, _>, HashMap<_, _>) = {
+            self.clients
+                .into_iter()
+                .map(|(addr, client)| ((addr, client.resp), (addr, client.intr)))
+                .unzip()
+        };
+
+        let (intr_sender, mut intr_receiver) = channel::<Addr>();
+        let (mut reader, mut writer) = {
+            let (r, w) = split(self.port);
+            let br = BufReader::new(FilterReader::new(r, intr_sender));
+            (br, w)
+        };
+        runtime::Handle::current().spawn(async move {
+            let clients = client_intrs;
+            loop {
+                let addr = intr_receiver.recv().await.unwrap();
+                log::trace!("Intr: {}", addr);
+                clients[&addr].notify_one();
+            }
+        });
+
         let mut sched = {
-            let mut addrs = self.clients.keys().copied().collect::<Vec<_>>();
+            let mut addrs = clients.keys().copied().collect::<Vec<_>>();
             addrs.sort();
             addrs.into_iter().cycle()
         };
-        let (mut reader, mut writer) = {
-            let (r, w) = split(self.port);
-            let br = BufReader::new(r);
-            (br, w)
-        };
         let mut buf = Vec::new();
-
         let mut current = sched.next().unwrap();
         let mut active = None;
         loop {
@@ -133,7 +164,7 @@ impl<Port: AsyncRead + AsyncWrite> Multiplexer<Port> {
                     let (ImmTx { addr, cmd }, r) = imm.unwrap();
                     (addr, cmd, r)
                 },
-                que = self.clients.get_mut(&current.clone()).unwrap().resp.next() => {
+                que = clients.get_mut(&current.clone()).unwrap().next() => {
                     let (tx, r) = que.unwrap();
                     match tx {
                         QueTx::Cmd(cmd) => (current, cmd, r),
@@ -170,6 +201,71 @@ impl<Port: AsyncRead + AsyncWrite> Multiplexer<Port> {
             log::trace!("'{}' -> '{}'", cmd, String::from_utf8_lossy(&buf));
 
             r.respond(String::from_utf8(buf.clone()).unwrap());
+        }
+    }
+}
+
+#[pin_project]
+struct FilterReader<R: AsyncRead> {
+    #[pin]
+    reader: R,
+    prev: Option<Addr>,
+    chan: Sender<Addr>,
+}
+
+impl<R: AsyncRead> FilterReader<R> {
+    pub fn new(reader: R, intr_chan: Sender<Addr>) -> Self {
+        Self {
+            reader,
+            prev: None,
+            chan: intr_chan,
+        }
+    }
+}
+
+impl<R: AsyncRead> AsyncRead for FilterReader<R> {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        let mut this = self.project();
+        let len = buf.filled().len();
+        match AsyncRead::poll_read(Pin::new(&mut this.reader), cx, buf) {
+            Poll::Ready(Ok(())) => {
+                let s = &mut buf.filled_mut()[len..];
+                if s.is_empty() {
+                    // Stream is closed.
+                    return Poll::Ready(Ok(()));
+                }
+                let mut j = 0;
+                for i in 0..s.len() {
+                    let b = s[i];
+                    match this.prev.take() {
+                        Some(p) => {
+                            let a = byte_is_intr(b).unwrap();
+                            assert_eq!(a, p);
+                            this.chan.send(a).unwrap();
+                        }
+                        None => match byte_is_intr(b) {
+                            Some(a) => {
+                                this.prev.replace(a);
+                            }
+                            None => {
+                                s[j] = b;
+                                j += 1;
+                            }
+                        },
+                    }
+                }
+                buf.set_filled(j);
+                if j == 0 {
+                    Poll::Pending
+                } else {
+                    Poll::Ready(Ok(()))
+                }
+            }
+            poll @ _ => poll,
         }
     }
 }

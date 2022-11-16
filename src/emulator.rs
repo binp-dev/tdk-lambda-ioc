@@ -1,5 +1,6 @@
 use async_ringbuf::{AsyncConsumer, AsyncHeapRb, AsyncProducer};
 use futures::{AsyncBufReadExt, AsyncWriteExt};
+use pin_project::pin_project;
 use std::{
     collections::HashMap,
     io,
@@ -149,13 +150,22 @@ impl Emulator {
                         panic!("Unknown command name: {}", name);
                     }
                 }
+                if self.dev(addr).alert() && !self.dev(addr).alert {
+                    let byte = 0x80 + addr;
+                    for _ in 0..2 {
+                        self.writer.write_all(&[byte]).await.unwrap();
+                    }
+                    self.dev(addr).alert = true;
+                }
             }
         }
     }
 }
 
 struct Device {
+    #[allow(dead_code)]
     addr: Addr,
+    alert: bool,
     out: bool,
     voltage: f64,
     current: f64,
@@ -167,10 +177,11 @@ impl Device {
     fn new(addr: Addr) -> Self {
         Self {
             addr,
+            alert: false,
             out: false,
             voltage: 0.0,
             current: 0.0,
-            over_voltage: 100.0,
+            over_voltage: 10.0,
             under_voltage: 0.0,
         }
     }
@@ -189,34 +200,42 @@ impl Device {
             0.0
         }
     }
+
+    fn alert(&self) -> bool {
+        !(self.under_voltage..self.over_voltage).contains(&self.voltage)
+    }
 }
 
+#[pin_project]
 pub struct SerialPort {
+    #[pin]
     writer: Writer,
+    #[pin]
     reader: Reader,
 }
 
 impl AsyncWrite for SerialPort {
     fn poll_write(
-        mut self: Pin<&mut Self>,
+        self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
-        AsyncWrite::poll_write(Pin::new(&mut self.writer), cx, buf)
+        AsyncWrite::poll_write(self.project().writer, cx, buf)
     }
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        AsyncWrite::poll_flush(Pin::new(&mut self.writer), cx)
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        AsyncWrite::poll_flush(self.project().writer, cx)
     }
-    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        AsyncWrite::poll_shutdown(Pin::new(&mut self.writer), cx)
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        AsyncWrite::poll_shutdown(self.project().writer, cx)
     }
 }
+
 impl AsyncRead for SerialPort {
     fn poll_read(
-        mut self: Pin<&mut Self>,
+        self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &mut ReadBuf<'_>,
     ) -> Poll<io::Result<()>> {
-        AsyncRead::poll_read(Pin::new(&mut self.reader), cx, buf)
+        AsyncRead::poll_read(self.project().reader, cx, buf)
     }
 }
