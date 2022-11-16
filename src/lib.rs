@@ -28,9 +28,21 @@ async fn async_main(mut ctx: Context) -> ! {
         .enable_all()
         .build()
         .unwrap();
+    let _guard = rt.enter();
     let addrs = 0..7;
-    let (emu, port) = emulator::Emulator::new(addrs.clone());
-    rt.spawn(emu.run());
+    #[cfg(feature = "emulate")]
+    let port = {
+        let (emu, port) = emulator::Emulator::new(addrs.clone());
+        rt.spawn(emu.run());
+        port
+    };
+    #[cfg(not(feature = "emulate"))]
+    let port = {
+        use tokio_serial::SerialPortBuilderExt;
+        tokio_serial::new("/dev/ttyUSB0", 19200)
+            .open_native_async()
+            .unwrap()
+    };
     let mut mux = Multiplexer::new(port);
     for addr in addrs {
         let dev = Device::new(addr, &mut ctx, mux.add_client(addr).unwrap());

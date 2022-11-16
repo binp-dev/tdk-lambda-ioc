@@ -149,9 +149,11 @@ impl<Port: AsyncRead + AsyncWrite> Multiplexer<Port> {
                 let cmd = format!("ADR {}", addr);
                 writer.write_all(cmd.as_bytes()).await.unwrap();
                 writer.write_u8(LINE_TERM).await.unwrap();
+                writer.flush().await.unwrap();
 
                 buf.clear();
                 reader.read_until(LINE_TERM, &mut buf).await.unwrap();
+                //reader.read_until(LINE_TERM, &mut buf).await.unwrap();
                 assert_eq!(buf.pop().unwrap(), LINE_TERM);
                 log::trace!("'{}' -> '{}'", cmd, String::from_utf8_lossy(&buf));
                 assert_eq!(buf, b"OK");
@@ -160,6 +162,7 @@ impl<Port: AsyncRead + AsyncWrite> Multiplexer<Port> {
 
             writer.write_all(cmd.as_bytes()).await.unwrap();
             writer.write_u8(LINE_TERM).await.unwrap();
+            writer.flush().await.unwrap();
 
             buf.clear();
             reader.read_until(LINE_TERM, &mut buf).await.unwrap();

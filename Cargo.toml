@@ -11,7 +11,7 @@ crate-type = ["cdylib"]
 path = "src/lib.rs"
 
 [features]
-default = ["emulate"]
+default = []
 emulate = ["async-ringbuf"]
 
 [dependencies]
