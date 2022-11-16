@@ -1,5 +1,4 @@
-#![forbid(unsafe_code)]
-
+#[forbid(unsafe_code)]
 mod device;
 #[cfg(feature = "emulate")]
 mod emulator;

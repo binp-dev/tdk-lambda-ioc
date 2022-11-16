@@ -155,6 +155,7 @@ impl Emulator {
 }
 
 struct Device {
+    #[allow(dead_code)]
     addr: Addr,
     out: bool,
     voltage: f64,
@@ -196,6 +197,13 @@ pub struct SerialPort {
     reader: Reader,
 }
 
+impl Unpin for SerialPort
+where
+    Writer: Unpin,
+    Reader: Unpin,
+{
+}
+
 impl AsyncWrite for SerialPort {
     fn poll_write(
         mut self: Pin<&mut Self>,
@@ -211,6 +219,7 @@ impl AsyncWrite for SerialPort {
         AsyncWrite::poll_shutdown(Pin::new(&mut self.writer), cx)
     }
 }
+
 impl AsyncRead for SerialPort {
     fn poll_read(
         mut self: Pin<&mut Self>,
