@@ -145,6 +145,7 @@ impl<Port: AsyncRead + AsyncWrite> Multiplexer<Port> {
             let clients = client_intrs;
             loop {
                 let addr = intr_receiver.recv().await.unwrap();
+                log::trace!("Intr: {}", addr);
                 clients[&addr].notify_one();
             }
         });

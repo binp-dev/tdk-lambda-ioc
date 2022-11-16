@@ -150,6 +150,13 @@ impl Emulator {
                         panic!("Unknown command name: {}", name);
                     }
                 }
+                if self.dev(addr).alert() && !self.dev(addr).alert {
+                    let byte = 0x80 + addr;
+                    for _ in 0..2 {
+                        self.writer.write_all(&[byte]).await.unwrap();
+                    }
+                    self.dev(addr).alert = true;
+                }
             }
         }
     }
@@ -158,6 +165,7 @@ impl Emulator {
 struct Device {
     #[allow(dead_code)]
     addr: Addr,
+    alert: bool,
     out: bool,
     voltage: f64,
     current: f64,
@@ -169,10 +177,11 @@ impl Device {
     fn new(addr: Addr) -> Self {
         Self {
             addr,
+            alert: false,
             out: false,
             voltage: 0.0,
             current: 0.0,
-            over_voltage: 100.0,
+            over_voltage: 10.0,
             under_voltage: 0.0,
         }
     }
@@ -190,6 +199,10 @@ impl Device {
         } else {
             0.0
         }
+    }
+
+    fn alert(&self) -> bool {
+        !(self.under_voltage..self.over_voltage).contains(&self.voltage)
     }
 }
 

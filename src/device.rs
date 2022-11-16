@@ -192,9 +192,9 @@ impl Device {
 }
 
 macro_rules! async_loop {
-    (($($vars:ident),*), $code:block) => {{
+    (($($bdst:ident = $bsrc:expr),*), $code:block) => {{
         #[allow(unused_parens)]
-        let ($($vars),*) = ($($vars.clone()),*);
+        let ($($bdst),*) = ($($bsrc.clone()),*);
         async move {
             loop {
                 $code
@@ -208,6 +208,11 @@ impl Device {
         let rt = runtime::Handle::current();
         let mut params = self.params;
         let cmdr = Arc::new(self.serial.req);
+
+        rt.spawn(async_loop!((intr = self.serial.intr), {
+            intr.notified().await;
+            log::warn!("PS{}: Interrupt caught!", self.addr);
+        }));
 
         log::debug!("PS{}: Initialize", self.addr);
         join!(
@@ -225,31 +230,31 @@ impl Device {
         cmdr.yield_();
 
         log::debug!("PS{}: Start monitors", self.addr);
-        rt.spawn(async_loop!((cmdr), {
+        rt.spawn(async_loop!((cmdr = cmdr), {
             params
                 .out_ena
                 .write_or_log(&cmdr, Priority::Immediate)
                 .await;
         }));
-        rt.spawn(async_loop!((cmdr), {
+        rt.spawn(async_loop!((cmdr = cmdr), {
             params
                 .volt_set
                 .write_or_log(&cmdr, Priority::Immediate)
                 .await;
         }));
-        rt.spawn(async_loop!((cmdr), {
+        rt.spawn(async_loop!((cmdr = cmdr), {
             params
                 .curr_set
                 .write_or_log(&cmdr, Priority::Immediate)
                 .await;
         }));
-        rt.spawn(async_loop!((cmdr), {
+        rt.spawn(async_loop!((cmdr = cmdr), {
             params
                 .over_volt_set_point
                 .write_or_log(&cmdr, Priority::Immediate)
                 .await;
         }));
-        rt.spawn(async_loop!((cmdr), {
+        rt.spawn(async_loop!((cmdr = cmdr), {
             params
                 .under_volt_set_point
                 .write_or_log(&cmdr, Priority::Immediate)
