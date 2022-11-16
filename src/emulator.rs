@@ -1,5 +1,6 @@
 use async_ringbuf::{AsyncConsumer, AsyncHeapRb, AsyncProducer};
 use futures::{AsyncBufReadExt, AsyncWriteExt};
+use pin_project::pin_project;
 use std::{
     collections::HashMap,
     io,
@@ -192,40 +193,36 @@ impl Device {
     }
 }
 
+#[pin_project]
 pub struct SerialPort {
+    #[pin]
     writer: Writer,
+    #[pin]
     reader: Reader,
-}
-
-impl Unpin for SerialPort
-where
-    Writer: Unpin,
-    Reader: Unpin,
-{
 }
 
 impl AsyncWrite for SerialPort {
     fn poll_write(
-        mut self: Pin<&mut Self>,
+        self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
-        AsyncWrite::poll_write(Pin::new(&mut self.writer), cx, buf)
+        AsyncWrite::poll_write(self.project().writer, cx, buf)
     }
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        AsyncWrite::poll_flush(Pin::new(&mut self.writer), cx)
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        AsyncWrite::poll_flush(self.project().writer, cx)
     }
-    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        AsyncWrite::poll_shutdown(Pin::new(&mut self.writer), cx)
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        AsyncWrite::poll_shutdown(self.project().writer, cx)
     }
 }
 
 impl AsyncRead for SerialPort {
     fn poll_read(
-        mut self: Pin<&mut Self>,
+        self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &mut ReadBuf<'_>,
     ) -> Poll<io::Result<()>> {
-        AsyncRead::poll_read(Pin::new(&mut self.reader), cx, buf)
+        AsyncRead::poll_read(self.project().reader, cx, buf)
     }
 }

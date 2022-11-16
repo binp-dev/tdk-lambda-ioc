@@ -33,6 +33,7 @@ async-ringbuf = { git = "https://github.com/agerasev/async-ringbuf.git", feature
     "impl-tokio",
 ], optional = true }
 thiserror = "1.0.37"
+pin-project = "1.0.12"
 
 [workspace]
 members = ["ferrite-rs"]

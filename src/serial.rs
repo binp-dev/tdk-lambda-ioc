@@ -1,3 +1,4 @@
+use pin_project::pin_project;
 use request_channel::{channel as request_channel, Requester, Responder};
 use std::{
     collections::{hash_map::Entry, HashMap},
@@ -87,14 +88,14 @@ struct Client {
     intr: Interrupt,
 }
 
-pub struct Multiplexer<Port: AsyncRead + AsyncWrite + Unpin> {
+pub struct Multiplexer<Port: AsyncRead + AsyncWrite> {
     port: Port,
     clients: HashMap<Addr, Client>,
     imm: Responder<ImmTx, Rx>,
     imm_req: Arc<Requester<ImmTx, Rx>>,
 }
 
-impl<Port: AsyncRead + AsyncWrite + Unpin> Multiplexer<Port> {
+impl<Port: AsyncRead + AsyncWrite> Multiplexer<Port> {
     pub fn new(port: Port) -> Self {
         let (req, resp) = request_channel::<ImmTx, Rx>();
         Self {
@@ -203,13 +204,15 @@ impl<Port: AsyncRead + AsyncWrite + Unpin> Multiplexer<Port> {
     }
 }
 
-struct FilterReader<R: AsyncRead + Unpin> {
+#[pin_project]
+struct FilterReader<R: AsyncRead> {
+    #[pin]
     reader: R,
     prev: Option<Addr>,
     chan: Sender<Addr>,
 }
 
-impl<R: AsyncRead + Unpin> FilterReader<R> {
+impl<R: AsyncRead> FilterReader<R> {
     pub fn new(reader: R, intr_chan: Sender<Addr>) -> Self {
         Self {
             reader,
@@ -219,14 +222,15 @@ impl<R: AsyncRead + Unpin> FilterReader<R> {
     }
 }
 
-impl<R: AsyncRead + Unpin> AsyncRead for FilterReader<R> {
+impl<R: AsyncRead> AsyncRead for FilterReader<R> {
     fn poll_read(
-        mut self: Pin<&mut Self>,
+        self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &mut ReadBuf<'_>,
     ) -> Poll<io::Result<()>> {
+        let mut this = self.project();
         let len = buf.filled().len();
-        match AsyncRead::poll_read(Pin::new(&mut self.reader), cx, buf) {
+        match AsyncRead::poll_read(Pin::new(&mut this.reader), cx, buf) {
             Poll::Ready(Ok(())) => {
                 let s = &mut buf.filled_mut()[len..];
                 if s.is_empty() {
@@ -236,15 +240,15 @@ impl<R: AsyncRead + Unpin> AsyncRead for FilterReader<R> {
                 let mut j = 0;
                 for i in 0..s.len() {
                     let b = s[i];
-                    match self.prev.take() {
+                    match this.prev.take() {
                         Some(p) => {
                             let a = byte_is_intr(b).unwrap();
                             assert_eq!(a, p);
-                            self.chan.send(a).unwrap();
+                            this.chan.send(a).unwrap();
                         }
                         None => match byte_is_intr(b) {
                             Some(a) => {
-                                self.prev.replace(a);
+                                this.prev.replace(a);
                             }
                             None => {
                                 s[j] = b;
