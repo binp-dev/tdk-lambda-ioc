@@ -14,7 +14,9 @@ use crate::serial::{Handle, Priority};
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Variable isn't ready to process")]
-    NotReady,
+    VarNotReady,
+    #[error("No response from device")]
+    NoResponse,
     #[error("Unexpected response: {0}")]
     Parse(String),
 }

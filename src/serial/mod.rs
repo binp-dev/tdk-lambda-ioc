@@ -26,7 +26,7 @@ pub enum Error {
     #[error("I/O Error: {0}")]
     Io(#[from] io::Error),
     #[error("Parse: {0}")]
-    Parse(#[from] FromUtf8Error),
+    Decode(#[from] FromUtf8Error),
     #[error("Timeout")]
     Timeout,
     #[error("Unexpected response from device: {0}")]
@@ -63,7 +63,7 @@ pub struct Commander {
 }
 
 impl Commander {
-    pub async fn execute(&self, cmd: Cmd, priority: Priority) -> CmdRes {
+    pub async fn execute(&self, cmd: Cmd, priority: Priority) -> Option<CmdRes> {
         match priority {
             Priority::Immediate => self
                 .imm
@@ -76,7 +76,6 @@ impl Commander {
         }
         .get_response()
         .await
-        .unwrap()
     }
     pub fn yield_(&self) {
         // Don't wait for response.
@@ -164,12 +163,11 @@ impl<Port: AsyncRead + AsyncWrite + Unpin> Multiplexer<Port> {
                     let (ImmTx { addr, cmd }, r) = imm.unwrap();
                     (addr, cmd, r)
                 },
-                // Read queued commans from current client
+                // Read queued commands from current client
                 que = clients.get_mut(&current.clone()).unwrap().next() => {
-                    let (tx, r) = que.unwrap();
-                    match tx {
-                        QueTx::Cmd(cmd) => (current, cmd, r),
-                        QueTx::Yield => {
+                    match que {
+                        Some((QueTx::Cmd(cmd), r)) => (current, cmd, r),
+                        None | Some((QueTx::Yield, ..)) => {
                             current = sched.next().unwrap();
                             continue;
                         },
@@ -193,7 +191,7 @@ impl<Port: AsyncRead + AsyncWrite + Unpin> Multiplexer<Port> {
                         active.replace(addr);
                     }
                     Err(err) => {
-                        log::error!("Cannot set device address {}: {:?}", addr, err);
+                        log::error!("Cannot set device address {}: {}", addr, err);
                         continue;
                     }
                 }
@@ -205,7 +203,7 @@ impl<Port: AsyncRead + AsyncWrite + Unpin> Multiplexer<Port> {
                     r.respond(resp);
                 }
                 Err(err) => {
-                    log::error!("Cannot run command '{}': {:?}", cmd, err);
+                    log::error!("Cannot run command '{}': {}", cmd, err);
                 }
             }
         }

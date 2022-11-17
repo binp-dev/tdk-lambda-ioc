@@ -116,12 +116,10 @@ impl Emulator {
                             } else {
                                 "ON"
                             }
+                        } else if !value {
+                            "0"
                         } else {
-                            if !value {
-                                "0"
-                            } else {
-                                "1"
-                            }
+                            "1"
                         };
                         self.send(text).await;
                     }

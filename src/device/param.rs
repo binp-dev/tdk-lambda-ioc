@@ -34,12 +34,7 @@ where
 
 impl<V: Var, P: Parser> Param<V, P> {
     fn log_err(&self, err: Error) {
-        log::error!(
-            "({}, {}) error: {:?}",
-            self.cmd.clone(),
-            self.var.name(),
-            err
-        );
+        log::error!("({}, {}) error: {}", self.cmd.clone(), self.var.name(), err);
     }
 }
 
@@ -50,23 +45,24 @@ impl<T: Copy + FromStr, P: Parser<Item = T>, const R: bool, const A: bool>
         &mut self,
         cmdr: &Commander,
         priority: Priority,
-    ) -> Result<T, String> {
+    ) -> Option<Result<T, String>> {
         let cmd = format!("{}?", self.cmd);
-        let cmd_res = cmdr.execute(cmd, priority).await;
-        self.parser.load(cmd_res)
+        let cmd_res = cmdr.execute(cmd, priority).await?;
+        Some(self.parser.load(cmd_res))
     }
 
     pub async fn init(&mut self, cmdr: &Commander, priority: Priority) -> Result<(), Error> {
         let value = self
             .read_from_device(cmdr, priority)
             .await
+            .ok_or(Error::NoResponse)?
             .map_err(Error::Parse)?;
         match self.var.try_acquire() {
             Some(guard) => {
                 guard.write(value).await;
                 Ok(())
             }
-            None => Err(Error::NotReady),
+            None => Err(Error::VarNotReady),
         }
     }
 
@@ -82,6 +78,7 @@ impl<T: Copy + FromStr, P: Parser<Item = T>, const R: bool> Param<Variable<T, R,
         let value = self
             .read_from_device(cmdr, priority)
             .await
+            .ok_or(Error::NoResponse)?
             .map_err(Error::Parse)?;
         self.var.request().await.write(value).await;
         Ok(())
@@ -100,7 +97,10 @@ impl<T: Copy + Display, P: Parser<Item = T>, const W: bool, const A: bool>
     pub async fn write(&mut self, cmdr: &Commander, priority: Priority) -> Result<(), Error> {
         let value = self.var.acquire().await.read().await;
         let cmd = format!("{} {}", self.cmd, self.parser.store(value));
-        let cmd_res = cmdr.execute(cmd.clone(), priority).await;
+        let cmd_res = cmdr
+            .execute(cmd.clone(), priority)
+            .await
+            .ok_or(Error::NoResponse)?;
         match cmd_res.as_str() {
             "OK" => Ok(()),
             _ => Err(Error::Parse(cmd_res)),
@@ -119,7 +119,7 @@ impl<P: Parser<Item = String>, const R: bool> Param<ArrayVariable<u8, R, true, t
         let cmd = format!("{}?", self.cmd);
         let value = self
             .parser
-            .load(cmdr.execute(cmd, priority).await)
+            .load(cmdr.execute(cmd, priority).await.ok_or(Error::NoResponse)?)
             .map_err(Error::Parse)?;
         self.var
             .request()

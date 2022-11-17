@@ -70,7 +70,7 @@ impl<W: AsyncWrite + Unpin, R: AsyncRead + Unpin> Connection<W, R> {
                     return Ok(resp);
                 }
                 Err(_) => {
-                    log::warn!("No response to '{}' (attempt: {})", cmd, i);
+                    log::warn!("No response to '{}' (attempt: {})", cmd, i + 1);
                 }
             }
         }
@@ -114,21 +114,24 @@ impl<R: AsyncRead + Unpin> AsyncRead for FilterReader<R> {
                 let mut j = 0;
                 for i in 0..s.len() {
                     let b = s[i];
-                    match this.prev.take() {
-                        Some(p) => {
-                            let a = byte_is_intr(b).unwrap();
-                            assert_eq!(a, p);
-                            this.chan.send(a).unwrap();
+                    match (this.prev.take(), byte_is_intr(b)) {
+                        (Some(p), Some(a)) => {
+                            if a == p {
+                                this.chan.send(a).unwrap();
+                            } else {
+                                log::error!("SRQ bytes differ: {} != {}'", p, a);
+                            }
                         }
-                        None => match byte_is_intr(b) {
-                            Some(a) => {
-                                this.prev.replace(a);
+                        (None, Some(a)) => {
+                            this.prev.replace(a);
+                        }
+                        (op, None) => {
+                            if let Some(p) = op {
+                                log::error!("Single SRQ byte {}, two needed", p);
                             }
-                            None => {
-                                s[j] = b;
-                                j += 1;
-                            }
-                        },
+                            s[j] = b;
+                            j += 1;
+                        }
                     }
                 }
                 buf.set_filled(j);
