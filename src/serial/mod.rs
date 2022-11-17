@@ -1,21 +1,18 @@
-use pin_project::pin_project;
+mod conn;
+use conn::*;
+
 use request_channel::{channel as request_channel, Requester, Responder};
 use std::{
     collections::{hash_map::Entry, HashMap},
     io,
-    pin::Pin,
+    string::FromUtf8Error,
     sync::Arc,
-    task::{Context, Poll},
-    time::Duration,
 };
+use thiserror::Error;
 use tokio::{
-    io::{split, AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader, ReadBuf},
+    io::{split, AsyncRead, AsyncWrite},
     runtime, select,
-    sync::{
-        mpsc::{unbounded_channel as channel, UnboundedSender as Sender},
-        Notify,
-    },
-    time::sleep,
+    sync::{mpsc::unbounded_channel as channel, Notify},
 };
 
 pub type Addr = u8;
@@ -24,12 +21,16 @@ pub type CmdRes = String;
 
 pub const LINE_TERM: u8 = b'\r';
 
-fn byte_is_intr(b: u8) -> Option<Addr> {
-    if b >= 0x80 {
-        Some(b - 0x80)
-    } else {
-        None
-    }
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("I/O Error: {0}")]
+    Io(#[from] io::Error),
+    #[error("Parse: {0}")]
+    Parse(#[from] FromUtf8Error),
+    #[error("Timeout")]
+    Timeout,
+    #[error("Unexpected response from device: {0}")]
+    Device(String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -90,14 +91,14 @@ struct Client {
     intr: Interrupt,
 }
 
-pub struct Multiplexer<Port: AsyncRead + AsyncWrite> {
+pub struct Multiplexer<Port: AsyncRead + AsyncWrite + Unpin> {
     port: Port,
     clients: HashMap<Addr, Client>,
     imm: Responder<ImmTx, Rx>,
     imm_req: Arc<Requester<ImmTx, Rx>>,
 }
 
-impl<Port: AsyncRead + AsyncWrite> Multiplexer<Port> {
+impl<Port: AsyncRead + AsyncWrite + Unpin> Multiplexer<Port> {
     pub fn new(port: Port) -> Self {
         let (req, resp) = request_channel::<ImmTx, Rx>();
         Self {
@@ -137,35 +138,33 @@ impl<Port: AsyncRead + AsyncWrite> Multiplexer<Port> {
                 .unzip()
         };
 
-        let (intr_sender, mut intr_receiver) = channel::<Addr>();
-        let (mut reader, mut writer) = {
-            let (r, w) = split(self.port);
-            let br = BufReader::new(FilterReader::new(r, intr_sender));
-            (br, w)
-        };
+        let (intr_sender, mut intr) = channel::<Addr>();
         runtime::Handle::current().spawn(async move {
             let clients = client_intrs;
             loop {
-                let addr = intr_receiver.recv().await.unwrap();
+                let addr = intr.recv().await.unwrap();
                 log::trace!("Intr: {}", addr);
                 clients[&addr].notify_one();
             }
         });
+
+        let mut conn = Connection::new(split(self.port), intr_sender);
 
         let mut sched = {
             let mut addrs = clients.keys().copied().collect::<Vec<_>>();
             addrs.sort();
             addrs.into_iter().cycle()
         };
-        let mut buf = Vec::new();
         let mut current = sched.next().unwrap();
         let mut active = None;
         loop {
             let (addr, cmd, r) = select! {
+                // Read immediate commands from all clients
                 imm = self.imm.next() => {
                     let (ImmTx { addr, cmd }, r) = imm.unwrap();
                     (addr, cmd, r)
                 },
+                // Read queued commans from current client
                 que = clients.get_mut(&current.clone()).unwrap().next() => {
                     let (tx, r) = que.unwrap();
                     match tx {
@@ -178,100 +177,37 @@ impl<Port: AsyncRead + AsyncWrite> Multiplexer<Port> {
                 },
             };
 
+            // Switch active address if needed
             if !active.map(|a| addr == a).unwrap_or(false) {
-                sleep(Duration::from_millis(10)).await;
-
-                let cmd = format!("ADR {}", addr);
-                writer.write_all(cmd.as_bytes()).await.unwrap();
-                writer.write_u8(LINE_TERM).await.unwrap();
-                writer.flush().await.unwrap();
-                log::trace!("-> '{}'", cmd);
-
-                buf.clear();
-                reader.read_until(LINE_TERM, &mut buf).await.unwrap();
-                assert_eq!(buf.pop().unwrap(), LINE_TERM);
-                log::trace!("<- '{}'", String::from_utf8_lossy(&buf));
-                assert_eq!(buf, b"OK");
-                active.replace(addr);
-            }
-
-            sleep(Duration::from_millis(10)).await;
-
-            writer.write_all(cmd.as_bytes()).await.unwrap();
-            writer.write_u8(LINE_TERM).await.unwrap();
-            writer.flush().await.unwrap();
-
-            buf.clear();
-            reader.read_until(LINE_TERM, &mut buf).await.unwrap();
-            assert_eq!(buf.pop().unwrap(), LINE_TERM);
-            log::trace!("'{}' -> '{}'", cmd, String::from_utf8_lossy(&buf));
-
-            r.respond(String::from_utf8(buf.clone()).unwrap());
-        }
-    }
-}
-
-#[pin_project]
-struct FilterReader<R: AsyncRead> {
-    #[pin]
-    reader: R,
-    prev: Option<Addr>,
-    chan: Sender<Addr>,
-}
-
-impl<R: AsyncRead> FilterReader<R> {
-    pub fn new(reader: R, intr_chan: Sender<Addr>) -> Self {
-        Self {
-            reader,
-            prev: None,
-            chan: intr_chan,
-        }
-    }
-}
-
-impl<R: AsyncRead> AsyncRead for FilterReader<R> {
-    fn poll_read(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &mut ReadBuf<'_>,
-    ) -> Poll<io::Result<()>> {
-        let mut this = self.project();
-        let len = buf.filled().len();
-        match AsyncRead::poll_read(Pin::new(&mut this.reader), cx, buf) {
-            Poll::Ready(Ok(())) => {
-                let s = &mut buf.filled_mut()[len..];
-                if s.is_empty() {
-                    // Stream is closed.
-                    return Poll::Ready(Ok(()));
-                }
-                let mut j = 0;
-                for i in 0..s.len() {
-                    let b = s[i];
-                    match this.prev.take() {
-                        Some(p) => {
-                            let a = byte_is_intr(b).unwrap();
-                            assert_eq!(a, p);
-                            this.chan.send(a).unwrap();
+                match conn
+                    .request(&format!("ADR {}", addr))
+                    .await
+                    .and_then(|resp| {
+                        if resp == "OK" {
+                            Ok(())
+                        } else {
+                            Err(Error::Device(resp))
                         }
-                        None => match byte_is_intr(b) {
-                            Some(a) => {
-                                this.prev.replace(a);
-                            }
-                            None => {
-                                s[j] = b;
-                                j += 1;
-                            }
-                        },
+                    }) {
+                    Ok(()) => {
+                        active.replace(addr);
+                    }
+                    Err(err) => {
+                        log::error!("Cannot set device address {}: {:?}", addr, err);
+                        continue;
                     }
                 }
-                buf.set_filled(j);
-                if j == 0 {
-                    Poll::Pending
-                } else {
-                    Poll::Ready(Ok(()))
+            }
+
+            // Execute command
+            match conn.request(&cmd).await {
+                Ok(resp) => {
+                    r.respond(resp);
+                }
+                Err(err) => {
+                    log::error!("Cannot run command '{}': {:?}", cmd, err);
                 }
             }
-            poll => poll,
         }
     }
 }

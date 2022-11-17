@@ -1,6 +1,8 @@
 use async_ringbuf::{AsyncConsumer, AsyncHeapRb, AsyncProducer};
 use futures::{AsyncBufReadExt, AsyncWriteExt};
 use pin_project::pin_project;
+use rand::{Rng, SeedableRng};
+use rand_pcg::Pcg64;
 use std::{
     collections::HashMap,
     io,
@@ -69,6 +71,7 @@ impl Emulator {
     }
 
     pub async fn run(mut self) -> ! {
+        let mut rng = Pcg64::seed_from_u64(0xdeadbeef);
         let mut addr = None;
         loop {
             let cmd = self.recv().await;
@@ -78,6 +81,9 @@ impl Emulator {
             };
 
             sleep(Duration::from_millis(10)).await;
+            if rng.gen::<f64>() < 0.1 {
+                continue;
+            }
 
             if name == "ADR" {
                 assert_eq!(args.len(), 1);

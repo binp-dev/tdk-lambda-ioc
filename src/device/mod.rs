@@ -1,8 +1,8 @@
 mod param;
 mod parser;
 
-pub use param::*;
-pub use parser::*;
+use param::*;
+use parser::*;
 
 use ferrite::{variable::*, Context};
 use std::{fmt::Debug, sync::Arc};
@@ -15,7 +15,7 @@ use crate::serial::{Handle, Priority};
 pub enum Error {
     #[error("Variable isn't ready to process")]
     NotReady,
-    #[error("Unexpected response")]
+    #[error("Unexpected response: {0}")]
     Parse(String),
 }
 
