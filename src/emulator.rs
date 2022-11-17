@@ -1,5 +1,4 @@
 use async_ringbuf::{AsyncConsumer, AsyncHeapRb, AsyncProducer};
-use futures::{AsyncBufReadExt, AsyncWriteExt};
 use pin_project::pin_project;
 use rand::{Rng, SeedableRng};
 use rand_pcg::Pcg64;
@@ -12,7 +11,7 @@ use std::{
     time::Duration,
 };
 use tokio::{
-    io::{AsyncRead, AsyncWrite, ReadBuf},
+    io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader, ReadBuf},
     time::sleep,
 };
 
@@ -24,7 +23,7 @@ type Reader = AsyncConsumer<u8, Arc<Pipe>>;
 
 pub struct Emulator {
     writer: Writer,
-    reader: Reader,
+    reader: BufReader<Reader>,
     devs: HashMap<Addr, Device>,
 }
 
@@ -39,7 +38,7 @@ impl Emulator {
                     .into_iter()
                     .map(|addr| (addr, Device::new(addr)))
                     .collect(),
-                reader: fr,
+                reader: BufReader::new(fr),
                 writer: bw,
             },
             SerialPort {
