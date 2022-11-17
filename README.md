@@ -2,6 +2,6 @@
 
 ## TODO
 
-+ Parse `ON`/`OFF`.
 + Handle no response.
-+ Timeout before command.
++ Handle error codes (`E00..E08`)
+
