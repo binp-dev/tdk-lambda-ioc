@@ -1,6 +1,7 @@
 use ferrite::{variable::*, Context};
 use std::{
     fmt::{Debug, Display},
+    marker::PhantomData,
     str::FromStr,
     sync::Arc,
 };
@@ -13,37 +14,39 @@ use crate::serial::{Commander, Handle, Priority};
 enum Error {
     #[error("Variable isn't ready to process")]
     NotReady,
-    #[error("UNexpected response")]
+    #[error("Unexpected response")]
     Parse(String),
 }
 
-struct Param<V: Var> {
+struct Param<V: Var, P: Parser> {
     pub cmd: String,
     pub var: V,
+    pub parser: P,
 }
 
-impl<V: Var> Param<V>
+impl<V: Var, P: Parser> Param<V, P>
 where
     AnyVariable: Downcast<V>,
 {
-    fn new(cmd: &str, epics: &mut Context, name: &str) -> Self {
+    fn new(cmd: &str, epics: &mut Context, name: &str, parser: P) -> Self {
         log::trace!("parameter: {}", name);
         let any = epics
             .registry
             .remove(name)
-            .expect(&format!("No such name: {}", name));
+            .unwrap_or_else(|| panic!("No such name: {}", name));
         let info = any.info();
         let var = any
             .downcast()
-            .expect(&format!("Bad type, {:?} expected", info));
+            .unwrap_or_else(|| panic!("Bad type, {:?} expected", info));
         Self {
             cmd: String::from(cmd),
             var,
+            parser,
         }
     }
 }
 
-impl<V: Var> Param<V> {
+impl<V: Var, P: Parser> Param<V, P> {
     fn log_err(&self, err: Error) {
         log::error!(
             "({}, {}) error: {:?}",
@@ -54,7 +57,9 @@ impl<V: Var> Param<V> {
     }
 }
 
-impl<T: Copy + FromStr, const R: bool, const A: bool> Param<Variable<T, R, true, A>> {
+impl<T: Copy + FromStr, P: Parser<Item = T>, const R: bool, const A: bool>
+    Param<Variable<T, R, true, A>, P>
+{
     async fn read_from_device(
         &mut self,
         cmdr: &Commander,
@@ -62,7 +67,7 @@ impl<T: Copy + FromStr, const R: bool, const A: bool> Param<Variable<T, R, true,
     ) -> Result<T, String> {
         let cmd = format!("{}?", self.cmd);
         let cmd_res = cmdr.execute(cmd, priority).await;
-        cmd_res.parse::<T>().map_err(|_| cmd_res)
+        self.parser.load(cmd_res)
     }
 
     pub async fn init(&mut self, cmdr: &Commander, priority: Priority) -> Result<(), Error> {
@@ -86,7 +91,7 @@ impl<T: Copy + FromStr, const R: bool, const A: bool> Param<Variable<T, R, true,
     }
 }
 
-impl<T: Copy + FromStr, const R: bool> Param<Variable<T, R, true, true>> {
+impl<T: Copy + FromStr, P: Parser<Item = T>, const R: bool> Param<Variable<T, R, true, true>, P> {
     pub async fn read(&mut self, cmdr: &Commander, priority: Priority) -> Result<(), Error> {
         let value = self
             .read_from_device(cmdr, priority)
@@ -103,10 +108,12 @@ impl<T: Copy + FromStr, const R: bool> Param<Variable<T, R, true, true>> {
     }
 }
 
-impl<T: Copy + Display, const W: bool, const A: bool> Param<Variable<T, true, W, A>> {
+impl<T: Copy + Display, P: Parser<Item = T>, const W: bool, const A: bool>
+    Param<Variable<T, true, W, A>, P>
+{
     pub async fn write(&mut self, cmdr: &Commander, priority: Priority) -> Result<(), Error> {
         let value = self.var.acquire().await.read().await;
-        let cmd = format!("{} {}", self.cmd, value);
+        let cmd = format!("{} {}", self.cmd, self.parser.store(value));
         let cmd_res = cmdr.execute(cmd.clone(), priority).await;
         match cmd_res.as_str() {
             "OK" => Ok(()),
@@ -121,10 +128,13 @@ impl<T: Copy + Display, const W: bool, const A: bool> Param<Variable<T, true, W,
     }
 }
 
-impl<const R: bool> Param<ArrayVariable<u8, R, true, true>> {
+impl<P: Parser<Item = String>, const R: bool> Param<ArrayVariable<u8, R, true, true>, P> {
     pub async fn read(&mut self, cmdr: &Commander, priority: Priority) -> Result<(), Error> {
         let cmd = format!("{}?", self.cmd);
-        let value = cmdr.execute(cmd, priority).await;
+        let value = self
+            .parser
+            .load(cmdr.execute(cmd, priority).await)
+            .map_err(Error::Parse)?;
         self.var
             .request()
             .await
@@ -140,36 +150,130 @@ impl<const R: bool> Param<ArrayVariable<u8, R, true, true>> {
     }
 }
 
+trait Parser {
+    type Item;
+    fn load(&self, text: String) -> Result<Self::Item, String>;
+    fn store(&self, value: Self::Item) -> String;
+}
+
+#[derive(Debug, Clone)]
+struct NumParser<T: FromStr + Display> {
+    _p: PhantomData<T>,
+}
+impl<T: FromStr + Display> Default for NumParser<T> {
+    fn default() -> Self {
+        Self { _p: PhantomData }
+    }
+}
+impl<T: FromStr + Display> Parser for NumParser<T> {
+    type Item = T;
+    fn load(&self, text: String) -> Result<Self::Item, String> {
+        text.parse::<T>().map_err(|_| text)
+    }
+    fn store(&self, value: Self::Item) -> String {
+        format!("{}", value)
+    }
+}
+
+#[derive(Debug, Clone)]
+struct BoolParser {
+    false_: String,
+    true_: String,
+}
+impl BoolParser {
+    fn new(false_: String, true_: String) -> Self {
+        Self { false_, true_ }
+    }
+}
+impl Parser for BoolParser {
+    type Item = u16;
+    fn load(&self, text: String) -> Result<Self::Item, String> {
+        if text == self.false_ {
+            Ok(0)
+        } else if text == self.true_ {
+            Ok(1)
+        } else {
+            Err(text)
+        }
+    }
+    fn store(&self, value: Self::Item) -> String {
+        if value == 0 {
+            self.false_.clone()
+        } else {
+            self.true_.clone()
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct StringParser;
+impl Parser for StringParser {
+    type Item = String;
+    fn load(&self, text: String) -> Result<Self::Item, String> {
+        Ok(text)
+    }
+    fn store(&self, value: Self::Item) -> String {
+        value
+    }
+}
+
 struct Params {
-    pub ser_numb: Param<ArrayVariable<u8, false, true, true>>,
-    pub out_ena: Param<Variable<u16, true, true, false>>,
-    pub volt_real: Param<Variable<f64, false, true, true>>,
-    pub curr_real: Param<Variable<f64, false, true, true>>,
-    pub over_volt_set_point: Param<Variable<f64, true, true, false>>,
-    pub under_volt_set_point: Param<Variable<f64, true, true, false>>,
-    pub volt_set: Param<Variable<f64, true, true, false>>,
-    pub curr_set: Param<Variable<f64, true, true, false>>,
+    pub ser_numb: Param<ArrayVariable<u8, false, true, true>, StringParser>,
+    pub out_ena: Param<Variable<u16, true, true, false>, BoolParser>,
+    pub volt_real: Param<Variable<f64, false, true, true>, NumParser<f64>>,
+    pub curr_real: Param<Variable<f64, false, true, true>, NumParser<f64>>,
+    pub over_volt_set_point: Param<Variable<f64, true, true, false>, NumParser<f64>>,
+    pub under_volt_set_point: Param<Variable<f64, true, true, false>, NumParser<f64>>,
+    pub volt_set: Param<Variable<f64, true, true, false>, NumParser<f64>>,
+    pub curr_set: Param<Variable<f64, true, true, false>, NumParser<f64>>,
 }
 
 impl Params {
     pub fn new(epics: &mut Context, prefix: &str) -> Self {
+        let bool_parser = if prefix == "PS0:" {
+            BoolParser::new("OFF".to_string(), "ON".to_string())
+        } else {
+            BoolParser::new("0".to_string(), "1".to_string())
+        };
         Self {
-            ser_numb: Param::new("SN", epics, &format!("{}ser_numb", prefix)),
-            out_ena: Param::new("OUT", epics, &format!("{}out_ena", prefix)),
-            volt_real: Param::new("MV", epics, &format!("{}volt_real", prefix)),
-            curr_real: Param::new("MC", epics, &format!("{}curr_real", prefix)),
+            ser_numb: Param::new("SN", epics, &format!("{}ser_numb", prefix), StringParser),
+            out_ena: Param::new("OUT", epics, &format!("{}out_ena", prefix), bool_parser),
+            volt_real: Param::new(
+                "MV",
+                epics,
+                &format!("{}volt_real", prefix),
+                NumParser::default(),
+            ),
+            curr_real: Param::new(
+                "MC",
+                epics,
+                &format!("{}curr_real", prefix),
+                NumParser::default(),
+            ),
             over_volt_set_point: Param::new(
                 "OVP",
                 epics,
                 &format!("{}over_volt_set_point", prefix),
+                NumParser::default(),
             ),
             under_volt_set_point: Param::new(
                 "UVL",
                 epics,
                 &format!("{}under_volt_set_point", prefix),
+                NumParser::default(),
             ),
-            volt_set: Param::new("PV", epics, &format!("{}volt_set", prefix)),
-            curr_set: Param::new("PC", epics, &format!("{}curr_set", prefix)),
+            volt_set: Param::new(
+                "PV",
+                epics,
+                &format!("{}volt_set", prefix),
+                NumParser::default(),
+            ),
+            curr_set: Param::new(
+                "PC",
+                epics,
+                &format!("{}curr_set", prefix),
+                NumParser::default(),
+            ),
         }
     }
 }

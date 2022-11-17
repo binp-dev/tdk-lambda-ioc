@@ -6,6 +6,7 @@ use std::{
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
+    time::Duration,
 };
 use tokio::{
     io::{split, AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader, ReadBuf},
@@ -14,6 +15,7 @@ use tokio::{
         mpsc::{unbounded_channel as channel, UnboundedSender as Sender},
         Notify,
     },
+    time::sleep,
 };
 
 pub type Addr = u8;
@@ -177,19 +179,23 @@ impl<Port: AsyncRead + AsyncWrite> Multiplexer<Port> {
             };
 
             if !active.map(|a| addr == a).unwrap_or(false) {
+                sleep(Duration::from_millis(10)).await;
+
                 let cmd = format!("ADR {}", addr);
                 writer.write_all(cmd.as_bytes()).await.unwrap();
                 writer.write_u8(LINE_TERM).await.unwrap();
                 writer.flush().await.unwrap();
+                log::trace!("-> '{}'", cmd);
 
                 buf.clear();
                 reader.read_until(LINE_TERM, &mut buf).await.unwrap();
-                //reader.read_until(LINE_TERM, &mut buf).await.unwrap();
                 assert_eq!(buf.pop().unwrap(), LINE_TERM);
-                log::trace!("'{}' -> '{}'", cmd, String::from_utf8_lossy(&buf));
+                log::trace!("<- '{}'", String::from_utf8_lossy(&buf));
                 assert_eq!(buf, b"OK");
                 active.replace(addr);
             }
+
+            sleep(Duration::from_millis(10)).await;
 
             writer.write_all(cmd.as_bytes()).await.unwrap();
             writer.write_u8(LINE_TERM).await.unwrap();
@@ -265,7 +271,7 @@ impl<R: AsyncRead> AsyncRead for FilterReader<R> {
                     Poll::Ready(Ok(()))
                 }
             }
-            poll @ _ => poll,
+            poll => poll,
         }
     }
 }

@@ -96,15 +96,28 @@ impl Emulator {
                     }
                     "OUT" => {
                         self.dev(addr).out = match args[0] {
-                            "0" => false,
-                            "1" => true,
+                            "0" | "OFF" => false,
+                            "1" | "ON" => true,
                             _ => panic!(),
                         };
                         self.send("OK").await;
                     }
                     "OUT?" => {
-                        let value = self.dev(addr).out as u8;
-                        self.send(&value.to_string()).await;
+                        let value = self.dev(addr).out;
+                        let text = if addr == 0 {
+                            if !value {
+                                "OFF"
+                            } else {
+                                "ON"
+                            }
+                        } else {
+                            if !value {
+                                "0"
+                            } else {
+                                "1"
+                            }
+                        };
+                        self.send(text).await;
                     }
                     "PC" => {
                         self.dev(addr).current = args[0].parse().unwrap();
