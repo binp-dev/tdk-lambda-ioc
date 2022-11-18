@@ -98,9 +98,7 @@ impl<T: Copy + FromStr, P: Parser<T>, const R: bool> Param<T, P, Variable<T, R, 
     }
 }
 
-impl<T: Copy + Display, P: Parser<T>, const W: bool, const A: bool>
-    Param<T, P, Variable<T, true, W, A>>
-{
+impl<T: Copy + Display, P: Parser<T>, const A: bool> Param<T, P, Variable<T, true, true, A>> {
     pub async fn write(&mut self, cmdr: &Commander, priority: Priority) -> Result<(), Error> {
         let mut var = self.var.acquire().await;
         let value = *var;
