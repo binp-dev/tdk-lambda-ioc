@@ -1,5 +1,5 @@
 mod param;
-mod parser;
+pub mod parser;
 
 use param::*;
 use parser::*;
@@ -21,74 +21,55 @@ pub enum Error {
     Parse(String),
 }
 
-struct Params {
-    pub ser_numb: Param<ArrayVariable<u8, false, true, true>, StringParser>,
-    pub out_ena: Param<Variable<u16, true, true, false>, BoolParser>,
-    pub volt_real: Param<Variable<f64, false, true, true>, NumParser<f64>>,
-    pub curr_real: Param<Variable<f64, false, true, true>, NumParser<f64>>,
-    pub over_volt_set_point: Param<Variable<f64, true, true, false>, NumParser<f64>>,
-    pub under_volt_set_point: Param<Variable<f64, true, true, false>, NumParser<f64>>,
-    pub volt_set: Param<Variable<f64, true, true, false>, NumParser<f64>>,
-    pub curr_set: Param<Variable<f64, true, true, false>, NumParser<f64>>,
+pub trait ParserBool: Parser<u16> + Default + Send + 'static {}
+impl<P: Parser<u16> + Default + Send + 'static> ParserBool for P {}
+
+struct Params<B: ParserBool> {
+    pub ser_numb: Param<String, StringParser, ArrayVariable<u8, false, true, true>>,
+    pub out_ena: Param<u16, B, Variable<u16, true, true, false>>,
+    pub volt_real: Param<f64, NumParser, Variable<f64, false, true, true>>,
+    pub curr_real: Param<f64, NumParser, Variable<f64, false, true, true>>,
+    pub over_volt_set_point: Param<f64, NumParser, Variable<f64, true, true, false>>,
+    pub under_volt_set_point: Param<f64, NumParser, Variable<f64, true, true, false>>,
+    pub volt_set: Param<f64, NumParser, Variable<f64, true, true, false>>,
+    pub curr_set: Param<f64, NumParser, Variable<f64, true, true, false>>,
 }
 
-impl Params {
+impl<B: ParserBool> Params<B> {
     pub fn new(epics: &mut Context, prefix: &str) -> Self {
-        let bool_parser = if prefix == "PS0:" {
-            BoolParser::new("OFF".to_string(), "ON".to_string())
-        } else {
-            BoolParser::new("0".to_string(), "1".to_string())
-        };
         Self {
             ser_numb: Param::new("SN", epics, &format!("{}ser_numb", prefix), StringParser),
-            out_ena: Param::new("OUT", epics, &format!("{}out_ena", prefix), bool_parser),
-            volt_real: Param::new(
-                "MV",
-                epics,
-                &format!("{}volt_real", prefix),
-                NumParser::default(),
-            ),
-            curr_real: Param::new(
-                "MC",
-                epics,
-                &format!("{}curr_real", prefix),
-                NumParser::default(),
-            ),
+            out_ena: Param::new("OUT", epics, &format!("{}out_ena", prefix), B::default()),
+            volt_real: Param::new("MV", epics, &format!("{}volt_real", prefix), NumParser),
+            curr_real: Param::new("MC", epics, &format!("{}curr_real", prefix), NumParser),
             over_volt_set_point: Param::new(
                 "OVP",
                 epics,
                 &format!("{}over_volt_set_point", prefix),
-                NumParser::default(),
+                NumParser,
             ),
             under_volt_set_point: Param::new(
                 "UVL",
                 epics,
                 &format!("{}under_volt_set_point", prefix),
-                NumParser::default(),
+                NumParser,
             ),
-            volt_set: Param::new(
-                "PV",
-                epics,
-                &format!("{}volt_set", prefix),
-                NumParser::default(),
-            ),
-            curr_set: Param::new(
-                "PC",
-                epics,
-                &format!("{}curr_set", prefix),
-                NumParser::default(),
-            ),
+            volt_set: Param::new("PV", epics, &format!("{}volt_set", prefix), NumParser),
+            curr_set: Param::new("PC", epics, &format!("{}curr_set", prefix), NumParser),
         }
     }
 }
 
-pub struct Device {
+pub struct Device<B: ParserBool> {
     addr: u8,
-    params: Params,
+    params: Params<B>,
     serial: Handle,
 }
 
-impl Device {
+pub type DeviceOld = Device<parser::BoolParser>;
+pub type DeviceNew = Device<parser::NumParser>;
+
+impl<B: ParserBool> Device<B> {
     pub fn new(addr: u8, epics: &mut Context, serial: Handle) -> Self {
         let prefix = format!("PS{}:", addr);
         Self {
@@ -111,7 +92,7 @@ macro_rules! async_loop {
     }};
 }
 
-impl Device {
+impl<B: ParserBool> Device<B> {
     pub async fn run(self) -> ! {
         let rt = runtime::Handle::current();
         let mut params = self.params;

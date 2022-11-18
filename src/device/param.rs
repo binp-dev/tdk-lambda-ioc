@@ -4,13 +4,14 @@ use std::{fmt::Display, str::FromStr};
 use super::{Error, Parser};
 use crate::serial::{Commander, Priority};
 
-pub struct Param<V: Var, P: Parser> {
+pub struct Param<T, P: Parser<T>, V: Var> {
     pub cmd: String,
     pub var: V,
     pub parser: P,
+    pub value: Option<T>,
 }
 
-impl<V: Var, P: Parser> Param<V, P>
+impl<T, P: Parser<T>, V: Var> Param<T, P, V>
 where
     AnyVariable: Downcast<V>,
 {
@@ -28,18 +29,19 @@ where
             cmd: String::from(cmd),
             var,
             parser,
+            value: None,
         }
     }
 }
 
-impl<V: Var, P: Parser> Param<V, P> {
+impl<T, P: Parser<T>, V: Var> Param<T, P, V> {
     fn log_err(&self, err: Error) {
         log::error!("({}, {}) error: {}", self.cmd.clone(), self.var.name(), err);
     }
 }
 
-impl<T: Copy + FromStr, P: Parser<Item = T>, const R: bool, const A: bool>
-    Param<Variable<T, R, true, A>, P>
+impl<T: Copy + FromStr, P: Parser<T>, const R: bool, const A: bool>
+    Param<T, P, Variable<T, R, true, A>>
 {
     async fn read_from_device(&mut self, cmdr: &Commander, priority: Priority) -> Result<T, Error> {
         let cmd = format!("{}?", self.cmd);
@@ -71,7 +73,7 @@ impl<T: Copy + FromStr, P: Parser<Item = T>, const R: bool, const A: bool>
     }
 }
 
-impl<T: Copy + FromStr, P: Parser<Item = T>, const R: bool> Param<Variable<T, R, true, true>, P> {
+impl<T: Copy + FromStr, P: Parser<T>, const R: bool> Param<T, P, Variable<T, R, true, true>> {
     pub async fn read(&mut self, cmdr: &Commander, priority: Priority) -> Result<(), Error> {
         let val_res = self.read_from_device(cmdr, priority).await;
         let var = self.var.request().await;
@@ -94,8 +96,8 @@ impl<T: Copy + FromStr, P: Parser<Item = T>, const R: bool> Param<Variable<T, R,
     }
 }
 
-impl<T: Copy + Display, P: Parser<Item = T>, const W: bool, const A: bool>
-    Param<Variable<T, true, W, A>, P>
+impl<T: Copy + Display, P: Parser<T>, const W: bool, const A: bool>
+    Param<T, P, Variable<T, true, W, A>>
 {
     pub async fn write(&mut self, cmdr: &Commander, priority: Priority) -> Result<(), Error> {
         let var = self.var.acquire().await;
@@ -127,7 +129,7 @@ impl<T: Copy + Display, P: Parser<Item = T>, const W: bool, const A: bool>
     }
 }
 
-impl<P: Parser<Item = String>, const R: bool> Param<ArrayVariable<u8, R, true, true>, P> {
+impl<P: Parser<String>, const R: bool> Param<String, P, ArrayVariable<u8, R, true, true>> {
     pub async fn read(&mut self, cmdr: &Commander, priority: Priority) -> Result<(), Error> {
         let cmd = format!("{}?", self.cmd);
         let value = self

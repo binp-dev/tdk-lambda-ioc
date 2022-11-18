@@ -18,7 +18,10 @@ use futures::executor::block_on;
 use macro_rules_attribute::apply;
 use tokio::runtime;
 
-use crate::{device::Device, serial::Multiplexer};
+use crate::{
+    device::{DeviceNew, DeviceOld},
+    serial::Multiplexer,
+};
 
 #[apply(entry_point)]
 fn app_main(mut ctx: Context) {
@@ -34,10 +37,12 @@ async fn async_main(mut ctx: Context) -> ! {
         .build()
         .unwrap();
     let _guard = rt.enter();
-    let addrs = 0..7;
+    let addrs_old = [0];
+    let addrs_new = 1..7;
     #[cfg(feature = "emul")]
     let port = {
-        let (emu, port) = emulator::Emulator::new(addrs.clone());
+        let (emu, port) =
+            emulator::Emulator::new(addrs_old.into_iter().chain(addrs_new.clone().into_iter()));
         rt.spawn(emu.run());
         port
     };
@@ -49,9 +54,11 @@ async fn async_main(mut ctx: Context) -> ! {
             .unwrap()
     };
     let mut mux = Multiplexer::new(port);
-    for addr in addrs {
-        let dev = Device::new(addr, &mut ctx, mux.add_client(addr).unwrap());
-        rt.spawn(dev.run());
+    for addr in addrs_old {
+        rt.spawn(DeviceOld::new(addr, &mut ctx, mux.add_client(addr).unwrap()).run());
+    }
+    for addr in addrs_new {
+        rt.spawn(DeviceNew::new(addr, &mut ctx, mux.add_client(addr).unwrap()).run());
     }
     assert!(ctx.registry.is_empty());
     rt.block_on(mux.run())
