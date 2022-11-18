@@ -5,10 +5,10 @@ use super::{Error, Parser};
 use crate::serial::{Commander, Priority};
 
 pub struct Param<T, P: Parser<T>, V: Var> {
-    pub cmd: String,
-    pub var: V,
-    pub parser: P,
-    pub value: Option<T>,
+    cmd: String,
+    var: V,
+    parser: P,
+    value: Option<T>,
 }
 
 impl<T, P: Parser<T>, V: Var> Param<T, P, V>
@@ -54,6 +54,7 @@ impl<T: Copy + FromStr, P: Parser<T>, const R: bool, const A: bool>
         match self.var.try_acquire() {
             Some(var) => match val_res {
                 Ok(value) => {
+                    self.value.replace(value);
                     var.write(value).await;
                     Ok(())
                 }
@@ -79,6 +80,7 @@ impl<T: Copy + FromStr, P: Parser<T>, const R: bool> Param<T, P, Variable<T, R, 
         let var = self.var.request().await;
         match val_res {
             Ok(value) => {
+                self.value.replace(value);
                 var.write(value).await;
                 Ok(())
             }
@@ -100,7 +102,7 @@ impl<T: Copy + Display, P: Parser<T>, const W: bool, const A: bool>
     Param<T, P, Variable<T, true, W, A>>
 {
     pub async fn write(&mut self, cmdr: &Commander, priority: Priority) -> Result<(), Error> {
-        let var = self.var.acquire().await;
+        let mut var = self.var.acquire().await;
         let value = *var;
         let cmd = format!("{} {}", self.cmd, self.parser.store(value));
         match cmdr
@@ -112,10 +114,14 @@ impl<T: Copy + Display, P: Parser<T>, const W: bool, const A: bool>
                 _ => Err(Error::Parse(cmd_res)),
             }) {
             Ok(()) => {
+                self.value.replace(value);
                 var.accept().await;
                 Ok(())
             }
             Err(err) => {
+                if let Some(value) = self.value {
+                    *var = value;
+                }
                 var.reject(&format!("{}", err)).await;
                 Err(err)
             }
