@@ -1,12 +1,12 @@
 #![forbid(unsafe_code)]
 
-#[cfg(not(any(feature = "real", feature = "emul")))]
-compile_error!("You need to enable either 'real' or 'emul' feature.");
-#[cfg(all(feature = "real", feature = "emul"))]
-compile_error!("Features 'real' and 'emul' cannot be enabled both at once.");
+#[cfg(not(any(feature = "tcp", feature = "serial", feature = "emulator")))]
+compile_error!("You need to enable either 'tcp',  'serial' or 'emulator' feature.");
+#[cfg(all(feature = "tcp", feature = "serial", feature = "emulator"))]
+compile_error!("Features 'tcp', 'serial' and 'emulator' cannot be enabled both at once.");
 
 mod device;
-#[cfg(feature = "emul")]
+#[cfg(feature = "emulator")]
 mod emulator;
 mod serial;
 
@@ -39,20 +39,28 @@ async fn async_main(mut ctx: Context) -> ! {
     let _guard = rt.enter();
     let addrs_old = [0];
     let addrs_new = 1..7;
-    #[cfg(feature = "emul")]
+
+    #[cfg(feature = "tcp")]
+    let port = tokio::net::TcpStream::connect("10.0.0.77:4001")
+        .await
+        .unwrap();
+
+    #[cfg(feature = "emulator")]
     let port = {
         let (emu, port) =
             emulator::Emulator::new(addrs_old.into_iter().chain(addrs_new.clone().into_iter()));
         rt.spawn(emu.run());
         port
     };
-    #[cfg(feature = "real")]
+
+    #[cfg(feature = "serial")]
     let port = {
         use tokio_serial::SerialPortBuilderExt;
         tokio_serial::new("/dev/ttyUSB0", 19200)
             .open_native_async()
             .unwrap()
     };
+
     let mut mux = Multiplexer::new(port);
     for addr in addrs_old {
         rt.spawn(DeviceOld::new(addr, &mut ctx, mux.add_client(addr).unwrap()).run());

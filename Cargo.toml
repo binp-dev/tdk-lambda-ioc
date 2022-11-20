@@ -12,8 +12,9 @@ path = "src/lib.rs"
 
 [features]
 default = []
-real = ["tokio-serial"]
-emul = ["async-ringbuf", "rand", "rand_pcg"]
+tcp = ["tokio/net"]
+serial = ["tokio-serial"]
+emulator = ["async-ringbuf", "rand", "rand_pcg"]
 
 [dependencies]
 ferrite = { package = "ferrite-core", path = "ferrite-rs" }
