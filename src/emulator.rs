@@ -105,7 +105,8 @@ impl Emulator {
                             "1" | "ON" => true,
                             _ => panic!(),
                         };
-                        self.send("OK").await;
+                        //self.send("OK").await;
+                        self.send("E07").await;
                     }
                     "OUT?" => {
                         let value = self.dev(addr).out;

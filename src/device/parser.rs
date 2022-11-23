@@ -1,72 +1,46 @@
 use std::{
     fmt::{Debug, Display},
-    marker::PhantomData,
     str::FromStr,
 };
 
-pub trait Parser {
-    type Item;
-    fn load(&self, text: String) -> Result<Self::Item, String>;
-    fn store(&self, value: Self::Item) -> String;
+pub trait Parser<T> {
+    fn load(&self, text: String) -> Result<T, String>;
+    fn store(&self, value: T) -> String;
 }
 
-#[derive(Debug, Clone)]
-pub struct NumParser<T: FromStr + Display> {
-    _p: PhantomData<T>,
-}
-impl<T: FromStr + Display> Default for NumParser<T> {
-    fn default() -> Self {
-        Self { _p: PhantomData }
-    }
-}
-impl<T: FromStr + Display> Parser for NumParser<T> {
-    type Item = T;
-    fn load(&self, text: String) -> Result<Self::Item, String> {
+#[derive(Debug, Clone, Default)]
+pub struct NumParser;
+impl<T: FromStr + Display> Parser<T> for NumParser {
+    fn load(&self, text: String) -> Result<T, String> {
         text.parse::<T>().map_err(|_| text)
     }
-    fn store(&self, value: Self::Item) -> String {
+    fn store(&self, value: T) -> String {
         format!("{}", value)
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct BoolParser {
-    false_: String,
-    true_: String,
-}
-impl BoolParser {
-    pub fn new(false_: String, true_: String) -> Self {
-        Self { false_, true_ }
-    }
-}
-impl Parser for BoolParser {
-    type Item = u16;
-    fn load(&self, text: String) -> Result<Self::Item, String> {
-        if text == self.false_ {
-            Ok(0)
-        } else if text == self.true_ {
-            Ok(1)
-        } else {
-            Err(text)
+#[derive(Debug, Clone, Default)]
+pub struct BoolParser;
+impl Parser<u16> for BoolParser {
+    fn load(&self, text: String) -> Result<u16, String> {
+        match text.as_str() {
+            "OFF" => Ok(0),
+            "ON" => Ok(1),
+            _ => Err(text),
         }
     }
-    fn store(&self, value: Self::Item) -> String {
-        if value == 0 {
-            self.false_.clone()
-        } else {
-            self.true_.clone()
-        }
+    fn store(&self, value: u16) -> String {
+        if value == 0 { "OFF" } else { "ON" }.to_string()
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct StringParser;
-impl Parser for StringParser {
-    type Item = String;
-    fn load(&self, text: String) -> Result<Self::Item, String> {
+impl Parser<String> for StringParser {
+    fn load(&self, text: String) -> Result<String, String> {
         Ok(text)
     }
-    fn store(&self, value: Self::Item) -> String {
+    fn store(&self, value: String) -> String {
         value
     }
 }
