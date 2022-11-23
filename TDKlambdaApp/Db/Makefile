@@ -9,9 +9,6 @@ include $(TOP)/configure/CONFIG
 DB += records.db
 DB += records.substitution
 
-#DB += fast_records.db
-#DB += fast_records.substitution
-
 #----------------------------------------------------
 # If <anyname>.db template is not named <anyname>*.template add
 # <anyname>_template = <templatename>

@@ -18,9 +18,8 @@ TDKlambda_DBD += base.dbd
 # TDKlambda_registerRecordDeviceDriver.cpp derives from TDKlambda.dbd
 TDKlambda_SRCS += TDKlambda_registerRecordDeviceDriver.cpp
 
-# Build the main IOC entry point on workstation OSs.
-TDKlambda_SRCS_DEFAULT += TDKlambdaMain.cpp
-TDKlambda_SRCS_vxWorks += -nil-
+# Build the main IOC entry point.
+TDKlambda_SRCS += TDKlambdaMain.cpp
 
 # Use Ferrite
 TDKlambda_DBD += Ferrite.dbd

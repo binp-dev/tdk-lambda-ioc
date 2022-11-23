@@ -1,4 +1,0 @@
-file db/fast_records.db {
-    pattern {UNIT_ADR}
-        {"0"}
-}
