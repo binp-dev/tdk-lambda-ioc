@@ -1,6 +1,6 @@
 [submodule "FerriteSup"]
 	path = FerriteSup
-	url = https://gitlab.inp.nsk.su/agerasev/ferrite-epics.git
+	url = https://github.com/agerasev/ferrite-epics.git
 [submodule "ferrite-rs"]
 	path = ferrite-rs
-	url = https://gitlab.inp.nsk.su/agerasev/ferrite-rs.git
+	url = https://github.com/agerasev/ferrite-rs.git
