@@ -1,18 +1,26 @@
 mod conn;
 use conn::*;
 
+use futures::Stream;
 use request_channel::{channel as request_channel, Requester, Responder};
 use std::{
-    collections::{hash_map::Entry, HashMap},
+    collections::{hash_map::Entry, BTreeMap, HashMap, VecDeque},
     io,
     string::FromUtf8Error,
     sync::Arc,
+    time::Duration,
 };
 use thiserror::Error;
 use tokio::{
     io::{split, AsyncRead, AsyncWrite},
     runtime, select,
-    sync::{mpsc::unbounded_channel as channel, Notify},
+    sync::{
+        mpsc::{
+            unbounded_channel as channel, UnboundedReceiver as Receiver, UnboundedSender as Sender,
+        },
+        Notify,
+    },
+    time::{sleep_until, Instant},
 };
 
 pub type Addr = u8;
@@ -40,6 +48,12 @@ pub enum Priority {
 }
 
 #[derive(Debug, Clone)]
+pub enum Signal {
+    On,
+    Off,
+}
+
+#[derive(Debug, Clone)]
 struct ImmTx {
     addr: Addr,
     cmd: Cmd,
@@ -54,6 +68,7 @@ type Rx = CmdRes;
 pub struct Handle {
     pub req: Commander,
     pub intr: Interrupt,
+    pub sig: Receiver<Signal>,
 }
 
 pub struct Commander {
@@ -88,6 +103,7 @@ pub type Interrupt = Arc<Notify>;
 struct Client {
     resp: Responder<QueTx, Rx>,
     intr: Interrupt,
+    sig: Sender<Signal>,
 }
 
 pub struct Multiplexer<Port: AsyncRead + AsyncWrite + Unpin> {
@@ -115,9 +131,11 @@ impl<Port: AsyncRead + AsyncWrite + Unpin> Multiplexer<Port> {
         };
         let (req, resp) = request_channel::<QueTx, Rx>();
         let intr = Arc::new(Notify::new());
+        let (sig_send, sig_recv) = channel();
         vacant.insert(Client {
             resp,
             intr: intr.clone(),
+            sig: sig_send,
         });
         Some(Handle {
             req: Commander {
@@ -126,6 +144,7 @@ impl<Port: AsyncRead + AsyncWrite + Unpin> Multiplexer<Port> {
                 que: req,
             },
             intr,
+            sig: sig_recv,
         })
     }
 
@@ -149,14 +168,22 @@ impl<Port: AsyncRead + AsyncWrite + Unpin> Multiplexer<Port> {
 
         let mut conn = Connection::new(split(self.port), intr_sender);
 
-        let mut sched = {
-            let mut addrs = clients.keys().copied().collect::<Vec<_>>();
-            addrs.sort();
-            addrs.into_iter().cycle()
-        };
-        let mut current = sched.next().unwrap();
+        let mut sched = Scheduler::new(clients.keys().copied());
+        let mut next = None;
         let mut active = None;
         loop {
+            let client_fut = async {
+                let cur = match next {
+                    Some(a) => a,
+                    None => {
+                        let addr = sched.next().await.unwrap();
+                        next.replace(addr);
+                        addr
+                    }
+                };
+                (cur, clients.get_mut(&cur).unwrap().next().await)
+            };
+
             let (addr, cmd, r) = select! {
                 // Read immediate commands from all clients
                 imm = self.imm.next() => {
@@ -164,11 +191,12 @@ impl<Port: AsyncRead + AsyncWrite + Unpin> Multiplexer<Port> {
                     (addr, cmd, r)
                 },
                 // Read queued commands from current client
-                que = clients.get_mut(&current.clone()).unwrap().next() => {
+                (cur, que) = client_fut => {
                     match que {
-                        Some((QueTx::Cmd(cmd), r)) => (current, cmd, r),
+                        Some((QueTx::Cmd(cmd), r)) => (cur, cmd, r),
                         None | Some((QueTx::Yield, ..)) => {
-                            current = sched.next().unwrap();
+                            sched.schedule_active(cur);
+                            next = None;
                             continue;
                         },
                     }
@@ -207,5 +235,38 @@ impl<Port: AsyncRead + AsyncWrite + Unpin> Multiplexer<Port> {
                 }
             }
         }
+    }
+}
+
+struct Scheduler {
+    active: VecDeque<Addr>,
+    offline: VecDeque<(Instant, Addr)>,
+}
+
+impl Scheduler {
+    pub fn new<I: IntoIterator<Item = Addr>>(addrs: I) -> Self {
+        let mut active: VecDeque<_> = addrs.into_iter().collect();
+        active.as_mut_slices().0.sort();
+        Self {
+            active,
+            offline: VecDeque::new(),
+        }
+    }
+
+    async fn next(&mut self) -> Option<Addr> {
+        if let Some(a) = self.active.pop_front() {
+            return Some(a);
+        }
+        let (ts, a) = self.offline.pop_front()?;
+        sleep_until(ts).await;
+        Some(a)
+    }
+
+    fn schedule_active(&mut self, addr: Addr) {
+        self.active.push_back(addr);
+    }
+    fn schedule_offline(&mut self, addr: Addr) {
+        self.offline
+            .push_back((Instant::now() + Duration::from_secs(1), addr));
     }
 }
