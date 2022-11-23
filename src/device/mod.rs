@@ -13,8 +13,6 @@ use crate::serial::{Handle, Priority};
 
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("Variable isn't ready to process")]
-    VarNotReady,
     #[error("No response from device")]
     NoResponse,
     #[error("Unexpected response: {0}")]
@@ -25,14 +23,14 @@ pub trait ParserBool: Parser<u16> + Default + Send + 'static {}
 impl<P: Parser<u16> + Default + Send + 'static> ParserBool for P {}
 
 struct Params<B: ParserBool> {
-    pub ser_numb: Param<String, StringParser, ArrayVariable<u8, false, true, true>>,
-    pub out_ena: Param<u16, B, Variable<u16, true, true, false>>,
-    pub volt_real: Param<f64, NumParser, Variable<f64, false, true, true>>,
-    pub curr_real: Param<f64, NumParser, Variable<f64, false, true, true>>,
-    pub over_volt_set_point: Param<f64, NumParser, Variable<f64, true, true, false>>,
-    pub under_volt_set_point: Param<f64, NumParser, Variable<f64, true, true, false>>,
-    pub volt_set: Param<f64, NumParser, Variable<f64, true, true, false>>,
-    pub curr_set: Param<f64, NumParser, Variable<f64, true, true, false>>,
+    pub ser_numb: Param<String, StringParser, ArrayVariable<u8>>,
+    pub out_ena: Param<u16, B, Variable<u16>>,
+    pub volt_real: Param<f64, NumParser, Variable<f64>>,
+    pub curr_real: Param<f64, NumParser, Variable<f64>>,
+    pub over_volt_set_point: Param<f64, NumParser, Variable<f64>>,
+    pub under_volt_set_point: Param<f64, NumParser, Variable<f64>>,
+    pub volt_set: Param<f64, NumParser, Variable<f64>>,
+    pub curr_set: Param<f64, NumParser, Variable<f64>>,
 }
 
 impl<B: ParserBool> Params<B> {

@@ -40,9 +40,7 @@ impl<T, P: Parser<T>, V: Var> Param<T, P, V> {
     }
 }
 
-impl<T: Copy + FromStr, P: Parser<T>, const R: bool, const A: bool>
-    Param<T, P, Variable<T, R, true, A>>
-{
+impl<T: Copy + FromStr, P: Parser<T>> Param<T, P, Variable<T>> {
     async fn read_from_device(&mut self, cmdr: &Commander, priority: Priority) -> Result<T, Error> {
         let cmd = format!("{}?", self.cmd);
         let cmd_res = cmdr.execute(cmd, priority).await.ok_or(Error::NoResponse)?;
@@ -51,19 +49,17 @@ impl<T: Copy + FromStr, P: Parser<T>, const R: bool, const A: bool>
 
     pub async fn init(&mut self, cmdr: &Commander, priority: Priority) -> Result<(), Error> {
         let val_res = self.read_from_device(cmdr, priority).await;
-        match self.var.try_acquire() {
-            Some(var) => match val_res {
-                Ok(value) => {
-                    self.value.replace(value);
-                    var.write(value).await;
-                    Ok(())
-                }
-                Err(err) => {
-                    var.reject(&format!("{}", err)).await;
-                    Err(err)
-                }
-            },
-            None => Err(Error::VarNotReady),
+        let var = self.var.request().await;
+        match val_res {
+            Ok(value) => {
+                self.value.replace(value);
+                var.write(value).await;
+                Ok(())
+            }
+            Err(err) => {
+                var.reject(&format!("{}", err)).await;
+                Err(err)
+            }
         }
     }
 
@@ -74,7 +70,7 @@ impl<T: Copy + FromStr, P: Parser<T>, const R: bool, const A: bool>
     }
 }
 
-impl<T: Copy + FromStr, P: Parser<T>, const R: bool> Param<T, P, Variable<T, R, true, true>> {
+impl<T: Copy + FromStr, P: Parser<T>> Param<T, P, Variable<T>> {
     pub async fn read(&mut self, cmdr: &Commander, priority: Priority) -> Result<(), Error> {
         let val_res = self.read_from_device(cmdr, priority).await;
         let var = self.var.request().await;
@@ -98,7 +94,7 @@ impl<T: Copy + FromStr, P: Parser<T>, const R: bool> Param<T, P, Variable<T, R, 
     }
 }
 
-impl<T: Copy + Display, P: Parser<T>, const A: bool> Param<T, P, Variable<T, true, true, A>> {
+impl<T: Copy + Display, P: Parser<T>> Param<T, P, Variable<T>> {
     pub async fn write(&mut self, cmdr: &Commander, priority: Priority) -> Result<(), Error> {
         let mut var = self.var.acquire().await;
         let value = *var;
@@ -133,7 +129,7 @@ impl<T: Copy + Display, P: Parser<T>, const A: bool> Param<T, P, Variable<T, tru
     }
 }
 
-impl<P: Parser<String>, const R: bool> Param<String, P, ArrayVariable<u8, R, true, true>> {
+impl<P: Parser<String>> Param<String, P, ArrayVariable<u8>> {
     pub async fn read(&mut self, cmdr: &Commander, priority: Priority) -> Result<(), Error> {
         let cmd = format!("{}?", self.cmd);
         let value = self
