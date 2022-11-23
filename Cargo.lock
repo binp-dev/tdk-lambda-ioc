@@ -721,8 +721,9 @@ checksum = "456c603be3e8d448b072f410900c09faf164fbce2d480456f50eea6e25f9c848"
 
 [[package]]
 name = "request-channel"
-version = "0.0.2"
-source = "git+https://github.com/agerasev/request-channel.git#31bf9ad9eaf88b38d02fce54dd29aad08492f38b"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b30ac8bc6f4ecbbb2093766f823524059df595a9ea0825a1fca0fceaed1a9b47"
 dependencies = [
  "futures",
 ]

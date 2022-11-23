@@ -27,7 +27,7 @@ tokio = { version = "1.21.2", features = [
     "io-util",
 ] }
 tokio-serial = { version = "5.4.4", optional = true }
-request-channel = { git = "https://github.com/agerasev/request-channel.git" }
+request-channel = "0.1.0"
 log = "0.4"
 env_logger = "0.9.1"
 macro_rules_attribute = "0.1.2"
