@@ -21,6 +21,43 @@ fn byte_is_intr(b: u8) -> Option<Addr> {
     }
 }
 
+pub struct AddressedConnection<W: AsyncWrite + Unpin, R: AsyncRead + Unpin> {
+    conn: Connection<W, R>,
+    active: Option<Addr>,
+}
+
+impl<W: AsyncWrite + Unpin, R: AsyncRead + Unpin> AddressedConnection<W, R> {
+    pub fn new((reader, writer): (R, W), intr: Sender<Addr>) -> Self {
+        Self {
+            conn: Connection::new((reader, writer), intr),
+            active: None,
+        }
+    }
+
+    pub async fn request(&mut self, addr: Addr, cmd: &str) -> Result<String, Error> {
+        // Switch active address if needed
+        if !self.active.map(|a| addr == a).unwrap_or(false) {
+            self.conn
+                .request(&format!("ADR {}", addr))
+                .await
+                .and_then(|resp| {
+                    if resp == "OK" {
+                        Ok(())
+                    } else {
+                        Err(Error::Device(resp))
+                    }
+                })?;
+            self.active.replace(addr);
+        }
+
+        // Execute command
+        self.conn.request(cmd).await.map_err(|err| {
+            self.active.take();
+            err
+        })
+    }
+}
+
 pub struct Connection<W: AsyncWrite + Unpin, R: AsyncRead + Unpin> {
     writer: W,
     reader: BufReader<FilterReader<R>>,
