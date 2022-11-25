@@ -80,8 +80,8 @@ impl<B: ParserBool> Device<B> {
 
 macro_rules! async_loop {
     (($($bdst:ident = $bsrc:expr),*), $code:block) => {{
-        #[allow(unused_parens)]
-        let ($($bdst),*) = ($($bsrc.clone()),*);
+        #[allow(unused_parens, unused_mut)]
+        let (mut $($bdst),*) = ($($bsrc),*);
         async move {
             loop {
                 $code
@@ -96,9 +96,9 @@ impl<B: ParserBool> Device<B> {
         let mut params = self.params;
         let cmdr = Arc::new(self.serial.req);
 
-        rt.spawn(async_loop!((intr = self.serial.intr), {
-            intr.notified().await;
-            log::warn!("PS{}: Interrupt caught!", self.addr);
+        rt.spawn(async_loop!((sig = self.serial.sig), {
+            let msg = sig.recv().await.unwrap();
+            log::warn!("PS{}: Signal {:?}", self.addr, msg);
         }));
 
         log::debug!("PS{}: Initialize", self.addr);
@@ -117,31 +117,31 @@ impl<B: ParserBool> Device<B> {
         cmdr.yield_();
 
         log::debug!("PS{}: Start monitors", self.addr);
-        rt.spawn(async_loop!((cmdr = cmdr), {
+        rt.spawn(async_loop!((cmdr = cmdr.clone()), {
             params
                 .out_ena
                 .write_or_log(&cmdr, Priority::Immediate)
                 .await;
         }));
-        rt.spawn(async_loop!((cmdr = cmdr), {
+        rt.spawn(async_loop!((cmdr = cmdr.clone()), {
             params
                 .volt_set
                 .write_or_log(&cmdr, Priority::Immediate)
                 .await;
         }));
-        rt.spawn(async_loop!((cmdr = cmdr), {
+        rt.spawn(async_loop!((cmdr = cmdr.clone()), {
             params
                 .curr_set
                 .write_or_log(&cmdr, Priority::Immediate)
                 .await;
         }));
-        rt.spawn(async_loop!((cmdr = cmdr), {
+        rt.spawn(async_loop!((cmdr = cmdr.clone()), {
             params
                 .over_volt_set_point
                 .write_or_log(&cmdr, Priority::Immediate)
                 .await;
         }));
-        rt.spawn(async_loop!((cmdr = cmdr), {
+        rt.spawn(async_loop!((cmdr = cmdr.clone()), {
             params
                 .under_volt_set_point
                 .write_or_log(&cmdr, Priority::Immediate)

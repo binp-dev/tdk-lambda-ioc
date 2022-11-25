@@ -51,6 +51,7 @@ pub enum Priority {
 pub enum Signal {
     On,
     Off,
+    Intr,
 }
 
 #[derive(Debug, Clone)]
@@ -67,7 +68,6 @@ type Rx = CmdRes;
 
 pub struct Handle {
     pub req: Commander,
-    pub intr: Interrupt,
     pub sig: Receiver<Signal>,
 }
 
@@ -102,7 +102,6 @@ pub type Interrupt = Arc<Notify>;
 
 struct Client {
     resp: Responder<QueTx, Rx>,
-    intr: Interrupt,
     sig: Sender<Signal>,
 }
 
@@ -134,7 +133,6 @@ impl<Port: AsyncRead + AsyncWrite + Unpin> Multiplexer<Port> {
         let (sig_send, sig_recv) = channel();
         vacant.insert(Client {
             resp,
-            intr: intr.clone(),
             sig: sig_send,
         });
         Some(Handle {
@@ -143,7 +141,6 @@ impl<Port: AsyncRead + AsyncWrite + Unpin> Multiplexer<Port> {
                 imm: self.imm_req.clone(),
                 que: req,
             },
-            intr,
             sig: sig_recv,
         })
     }
@@ -154,7 +151,7 @@ impl<Port: AsyncRead + AsyncWrite + Unpin> Multiplexer<Port> {
         let (mut clients, client_intrs): (HashMap<_, _>, HashMap<_, _>) = {
             self.clients
                 .into_iter()
-                .map(|(addr, client)| ((addr, client.resp), (addr, client.intr)))
+                .map(|(addr, client)| ((addr, client.resp), (addr, client.sig)))
                 .unzip()
         };
 
@@ -164,7 +161,7 @@ impl<Port: AsyncRead + AsyncWrite + Unpin> Multiplexer<Port> {
             loop {
                 let addr = intr.recv().await.unwrap();
                 log::trace!("Intr: {}", addr);
-                clients[&addr].notify_one();
+                clients[&addr].send(Signal::Intr);
             }
         });
 
