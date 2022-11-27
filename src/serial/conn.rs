@@ -1,17 +1,16 @@
+use super::*;
 use pin_project::pin_project;
 use std::{
+    future::Future,
     io,
     pin::Pin,
     task::{Context, Poll},
-    time::Duration,
 };
 use tokio::{
-    io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader, ReadBuf},
+    io::{AsyncBufRead, AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader, ReadBuf},
     sync::mpsc::UnboundedSender as Sender,
     time::{sleep, timeout},
 };
-
-use super::{Addr, Error, LINE_TERM};
 
 fn byte_is_intr(b: u8) -> Option<Addr> {
     if b >= 0x80 {
@@ -21,12 +20,12 @@ fn byte_is_intr(b: u8) -> Option<Addr> {
     }
 }
 
-pub struct AddressedConnection<W: AsyncWrite + Unpin, R: AsyncRead + Unpin> {
+pub struct AddrConnection<W: AsyncWrite + Unpin, R: AsyncRead + Unpin> {
     conn: Connection<W, R>,
     active: Option<Addr>,
 }
 
-impl<W: AsyncWrite + Unpin, R: AsyncRead + Unpin> AddressedConnection<W, R> {
+impl<W: AsyncWrite + Unpin, R: AsyncRead + Unpin> AddrConnection<W, R> {
     pub fn new((reader, writer): (R, W), intr: Sender<Addr>) -> Self {
         Self {
             conn: Connection::new((reader, writer), intr),
@@ -56,14 +55,27 @@ impl<W: AsyncWrite + Unpin, R: AsyncRead + Unpin> AddressedConnection<W, R> {
             err
         })
     }
+
+    pub async fn is_online(&mut self, addr: Addr) -> Result<bool, Error> {
+        self.active.take();
+        match self.conn.request(&format!("ADR {}", addr)).await {
+            Ok(resp) => {
+                if resp == "OK" {
+                    self.active.replace(addr);
+                    Ok(true)
+                } else {
+                    Err(Error::Device(resp))
+                }
+            }
+            Err(Error::Timeout) => Ok(false),
+            Err(err) => Err(err),
+        }
+    }
 }
 
 pub struct Connection<W: AsyncWrite + Unpin, R: AsyncRead + Unpin> {
     writer: W,
     reader: BufReader<FilterReader<R>>,
-    delay: Duration,
-    timeout: Duration,
-    retries: usize,
 }
 
 impl<W: AsyncWrite + Unpin, R: AsyncRead + Unpin> Connection<W, R> {
@@ -71,18 +83,17 @@ impl<W: AsyncWrite + Unpin, R: AsyncRead + Unpin> Connection<W, R> {
         Self {
             writer,
             reader: BufReader::new(FilterReader::new(reader, intr)),
-            delay: Duration::from_millis(10),
-            timeout: Duration::from_millis(200),
-            retries: 2,
         }
     }
 
     pub async fn request(&mut self, cmd: &str) -> Result<String, Error> {
-        for i in 0..self.retries {
-            sleep(self.delay).await;
+        for i in 0..CMD_RETRIES {
+            sleep(CMD_DELAY).await;
 
             let mut buf = Vec::new();
-            match timeout(self.timeout, async {
+            match timeout(CMD_TIMEOUT, async {
+                clear(&mut self.reader).await?;
+
                 self.writer.write_all(cmd.as_bytes()).await?;
                 self.writer.write_u8(LINE_TERM).await?;
                 self.writer.flush().await?;
@@ -115,15 +126,47 @@ impl<W: AsyncWrite + Unpin, R: AsyncRead + Unpin> Connection<W, R> {
     }
 }
 
+fn clear<R: AsyncBufRead + Unpin>(reader: &mut R) -> Clear<'_, R> {
+    Clear { reader }
+}
+
+struct Clear<'a, R: AsyncBufRead + Unpin> {
+    reader: &'a mut R,
+}
+
+impl<'a, R: AsyncBufRead + Unpin> Unpin for Clear<'a, R> {}
+
+impl<'a, R: AsyncBufRead + Unpin> Future for Clear<'a, R> {
+    type Output = Result<usize, io::Error>;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let mut count = 0;
+        loop {
+            let len = match Pin::new(&mut self.reader).poll_fill_buf(cx) {
+                Poll::Pending => break Poll::Ready(Ok(count)),
+                Poll::Ready(res) => match res {
+                    Ok(buf) => {
+                        log::error!("Unexpected input: {:?}", String::from_utf8_lossy(buf));
+                        buf.len()
+                    }
+                    Err(err) => break Poll::Ready(Err(err)),
+                },
+            };
+            Pin::new(&mut self.reader).consume(len);
+            count += len;
+        }
+    }
+}
+
 #[pin_project]
-struct FilterReader<R: AsyncRead + Unpin> {
+struct FilterReader<R: AsyncRead> {
     #[pin]
     reader: R,
     prev: Option<Addr>,
     chan: Sender<Addr>,
 }
 
-impl<R: AsyncRead + Unpin> FilterReader<R> {
+impl<R: AsyncRead> FilterReader<R> {
     pub fn new(reader: R, intr_chan: Sender<Addr>) -> Self {
         Self {
             reader,
@@ -133,7 +176,7 @@ impl<R: AsyncRead + Unpin> FilterReader<R> {
     }
 }
 
-impl<R: AsyncRead + Unpin> AsyncRead for FilterReader<R> {
+impl<R: AsyncRead> AsyncRead for FilterReader<R> {
     fn poll_read(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,

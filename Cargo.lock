@@ -720,9 +720,9 @@ checksum = "456c603be3e8d448b072f410900c09faf164fbce2d480456f50eea6e25f9c848"
 
 [[package]]
 name = "request-channel"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b30ac8bc6f4ecbbb2093766f823524059df595a9ea0825a1fca0fceaed1a9b47"
+checksum = "60c4b0a353db7aa429a85d339c68bcd2ef35d4221e76eef00de5ca97fab9b44c"
 dependencies = [
  "futures",
 ]
