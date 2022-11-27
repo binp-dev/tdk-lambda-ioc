@@ -204,12 +204,13 @@ struct Scheduler {
 
 impl Scheduler {
     pub fn new<I: IntoIterator<Item = Addr>>(addrs: I) -> Self {
-        let mut online: VecDeque<_> = addrs.into_iter().collect();
-        online.as_mut_slices().0.sort();
+        let now = Instant::now();
+        let mut offline: VecDeque<_> = addrs.into_iter().map(|a| (now, a)).collect();
+        offline.as_mut_slices().0.sort();
         Self {
             current: None,
-            online,
-            offline: VecDeque::new(),
+            online: VecDeque::new(),
+            offline,
         }
     }
 
