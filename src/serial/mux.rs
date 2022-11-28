@@ -36,7 +36,7 @@ impl<Port: AsyncRead + AsyncWrite + Unpin> Multiplexer<Port> {
         }
     }
 
-    pub fn add_client(&mut self, addr: Addr) -> Option<Handle> {
+    pub fn add_client(&mut self, addr: Addr) -> Option<SerialHandle> {
         let vacant = match self.clients.entry(addr) {
             Entry::Vacant(vacant) => vacant,
             Entry::Occupied(..) => return None,
@@ -47,7 +47,7 @@ impl<Port: AsyncRead + AsyncWrite + Unpin> Multiplexer<Port> {
             resp,
             sig: sig_send,
         });
-        Some(Handle {
+        Some(SerialHandle {
             req: Commander {
                 addr,
                 imm: self.imm_req.clone(),

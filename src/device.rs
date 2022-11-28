@@ -1,6 +1,49 @@
-use crate::serial::{Commander, Priority};
+use crate::serial::{Commander, Priority, SerialHandle};
 use std::{fmt::Debug, fmt::Display, marker::PhantomData, str::FromStr, sync::Arc};
 use thiserror::Error;
+
+pub trait ParserBool: Parser<u16> + Default + Send + 'static {}
+impl<P: Parser<u16> + Default + Send + 'static> ParserBool for P {}
+
+pub struct Device<B: ParserBool> {
+    /// Serial number
+    pub sn: DeviceVariable<String, StringParser>,
+    /// Output enabled
+    pub out: DeviceVariable<u16, B>,
+    /// Measured voltage
+    pub mv: DeviceVariable<f64, NumParser>,
+    /// Measured current
+    pub mc: DeviceVariable<f64, NumParser>,
+    /// Over-voltage protection
+    pub ovp: DeviceVariable<f64, NumParser>,
+    /// Under-voltage limit
+    pub uvl: DeviceVariable<f64, NumParser>,
+    /// Put voltage
+    pub pv: DeviceVariable<f64, NumParser>,
+    /// Put current
+    pub pc: DeviceVariable<f64, NumParser>,
+}
+
+impl<B: ParserBool> Device<B> {
+    pub fn new(handle: SerialHandle) -> Self {
+        let cmdr = Arc::new(handle.req);
+        let this = Self {
+            sn: DeviceVariable::new(cmdr.clone(), "SN"),
+            out: DeviceVariable::new(cmdr.clone(), "OUT"),
+            mv: DeviceVariable::new(cmdr.clone(), "MV"),
+            mc: DeviceVariable::new(cmdr.clone(), "MC"),
+            ovp: DeviceVariable::new(cmdr.clone(), "OVP"),
+            uvl: DeviceVariable::new(cmdr.clone(), "UVL"),
+            pv: DeviceVariable::new(cmdr.clone(), "PV"),
+            pc: DeviceVariable::new(cmdr.clone(), "PC"),
+        };
+        drop(cmdr);
+        this
+    }
+}
+
+pub type DeviceOld = Device<BoolParser>;
+pub type DeviceNew = Device<NumParser>;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -10,7 +53,7 @@ pub enum Error {
     Parse(String),
 }
 
-pub trait Parser<T> {
+pub trait Parser<T>: Default {
     fn load(&self, text: String) -> Result<T, String>;
     fn store(&self, value: T) -> String;
 }
@@ -61,7 +104,16 @@ pub struct DeviceVariable<T, P: Parser<T>> {
     _p: PhantomData<T>,
 }
 
-impl<T: Copy, P: Parser<T>> DeviceVariable<T, P> {
+impl<T, P: Parser<T>> DeviceVariable<T, P> {
+    pub fn new(cmdr: Arc<Commander>, name: &str) -> Self {
+        Self {
+            cmdr,
+            name: String::from(name),
+            parser: P::default(),
+            _p: PhantomData,
+        }
+    }
+
     async fn read(&mut self, priority: Priority) -> Result<T, Error> {
         let cmd = format!("{}?", self.name);
         let cmd_res = self
@@ -71,9 +123,7 @@ impl<T: Copy, P: Parser<T>> DeviceVariable<T, P> {
             .ok_or(Error::NoResponse)?;
         self.parser.load(cmd_res).map_err(Error::Parse)
     }
-}
 
-impl<T: Copy, P: Parser<T>> DeviceVariable<T, P> {
     pub async fn write(&mut self, value: T, priority: Priority) -> Result<(), Error> {
         self.cmdr
             .execute(

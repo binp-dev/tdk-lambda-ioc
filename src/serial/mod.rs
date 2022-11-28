@@ -49,7 +49,7 @@ enum QueTx {
 }
 type Rx = CmdRes;
 
-pub struct Handle {
+pub struct SerialHandle {
     pub req: Commander,
     pub sig: Receiver<Signal>,
 }

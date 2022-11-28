@@ -4,10 +4,15 @@ mod variable;
 use param::*;
 use variable::*;
 
-use crate::serial::{Commander, Handle, Priority, Signal};
+use crate::serial::{Commander, Priority, SerialHandle, Signal};
 use ferrite::{variable::*, Context};
 use std::sync::Arc;
 use tokio::{join, runtime, select, sync::Notify, task::JoinHandle};
+
+pub struct Binding<T, V: VarSync, A: Adapter<T, V>, P: Parser<T>> {
+    front: IfaceVariable<T, V, A>,
+    back: DeviceVariable<T, P>,
+}
 
 pub trait ParserBool: Parser<u16> + Default + Send + 'static {}
 impl<P: Parser<u16> + Default + Send + 'static> ParserBool for P {}
@@ -51,14 +56,14 @@ impl<B: ParserBool> Params<B> {
 pub struct Device<B: ParserBool> {
     name: String,
     params: Params<B>,
-    serial: Handle,
+    serial: SerialHandle,
 }
 
 pub type DeviceOld = Device<BoolParser>;
 pub type DeviceNew = Device<NumParser>;
 
 impl<B: ParserBool> Device<B> {
-    pub fn new(addr: u8, epics: &mut Context, serial: Handle) -> Self {
+    pub fn new(addr: u8, epics: &mut Context, serial: SerialHandle) -> Self {
         let name = format!("PS{}", addr);
         Self {
             params: Params::new(epics, &name),

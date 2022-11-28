@@ -8,6 +8,7 @@ compile_error!("Features 'tcp', 'serial' and 'emulator' cannot be enabled both a
 mod device;
 #[cfg(feature = "emulator")]
 mod emulator;
+mod interface;
 mod serial;
 
 /// *Export symbols being called from IOC.*
@@ -20,6 +21,7 @@ use tokio::runtime;
 
 use crate::{
     device::{DeviceNew, DeviceOld},
+    interface::Interface,
     serial::Multiplexer,
 };
 
@@ -62,12 +64,14 @@ async fn async_main(mut ctx: Context) -> ! {
     };
 
     let mut mux = Multiplexer::new(port);
+    /*
     for addr in addrs_old {
         rt.spawn(DeviceOld::new(addr, &mut ctx, mux.add_client(addr).unwrap()).run());
     }
     for addr in addrs_new {
         rt.spawn(DeviceNew::new(addr, &mut ctx, mux.add_client(addr).unwrap()).run());
     }
+    */
     assert!(ctx.registry.is_empty());
     rt.block_on(mux.run())
 }
