@@ -5,7 +5,7 @@ use thiserror::Error;
 pub trait ParserBool: Parser<u16> + Default + Send + 'static {}
 impl<P: Parser<u16> + Default + Send + 'static> ParserBool for P {}
 
-pub struct Device<B: ParserBool> {
+pub struct DeviceVars<B: ParserBool> {
     /// Serial number
     pub sn: DeviceVariable<String, StringParser>,
     /// Output enabled
@@ -24,9 +24,8 @@ pub struct Device<B: ParserBool> {
     pub pc: DeviceVariable<f64, NumParser>,
 }
 
-impl<B: ParserBool> Device<B> {
-    pub fn new(handle: SerialHandle) -> Self {
-        let cmdr = Arc::new(handle.req);
+impl<B: ParserBool> DeviceVars<B> {
+    pub fn new(cmdr: Arc<Commander>) -> Self {
         let this = Self {
             sn: DeviceVariable::new(cmdr.clone(), "SN"),
             out: DeviceVariable::new(cmdr.clone(), "OUT"),
@@ -39,6 +38,20 @@ impl<B: ParserBool> Device<B> {
         };
         drop(cmdr);
         this
+    }
+}
+
+pub struct Device<B: ParserBool> {
+    pub vars: DeviceVars<B>,
+    pub handle: SerialHandle,
+}
+
+impl<B: ParserBool> Device<B> {
+    pub fn new(handle: SerialHandle) -> Self {
+        Self {
+            vars: DeviceVars::new(handle.req.clone()),
+            handle,
+        }
     }
 }
 
@@ -55,7 +68,7 @@ pub enum Error {
 
 pub trait Parser<T>: Default {
     fn load(&self, text: String) -> Result<T, String>;
-    fn store(&self, value: T) -> String;
+    fn store(&self, value: &T) -> String;
 }
 
 #[derive(Debug, Clone, Default)]
@@ -64,7 +77,7 @@ impl<T: FromStr + Display> Parser<T> for NumParser {
     fn load(&self, text: String) -> Result<T, String> {
         text.parse::<T>().map_err(|_| text)
     }
-    fn store(&self, value: T) -> String {
+    fn store(&self, value: &T) -> String {
         format!("{}", value)
     }
 }
@@ -79,8 +92,8 @@ impl Parser<u16> for BoolParser {
             _ => Err(text),
         }
     }
-    fn store(&self, value: u16) -> String {
-        if value == 0 { "OFF" } else { "ON" }.to_string()
+    fn store(&self, value: &u16) -> String {
+        if *value == 0 { "OFF" } else { "ON" }.to_string()
     }
 }
 
@@ -90,8 +103,8 @@ impl Parser<String> for StringParser {
     fn load(&self, text: String) -> Result<String, String> {
         Ok(text)
     }
-    fn store(&self, value: String) -> String {
-        value
+    fn store(&self, value: &String) -> String {
+        value.clone()
     }
 }
 
@@ -114,7 +127,7 @@ impl<T, P: Parser<T>> DeviceVariable<T, P> {
         }
     }
 
-    async fn read(&mut self, priority: Priority) -> Result<T, Error> {
+    pub async fn read(&mut self, priority: Priority) -> Result<T, Error> {
         let cmd = format!("{}?", self.name);
         let cmd_res = self
             .cmdr
@@ -124,7 +137,7 @@ impl<T, P: Parser<T>> DeviceVariable<T, P> {
         self.parser.load(cmd_res).map_err(Error::Parse)
     }
 
-    pub async fn write(&mut self, value: T, priority: Priority) -> Result<(), Error> {
+    pub async fn write(&mut self, value: &T, priority: Priority) -> Result<(), Error> {
         self.cmdr
             .execute(
                 format!("{} {}", self.name, self.parser.store(value)),

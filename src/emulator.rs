@@ -15,7 +15,7 @@ use tokio::{
     time::sleep,
 };
 
-use crate::serial::{Addr, LINE_TERM};
+use crate::{serial::LINE_TERM, Addr};
 
 type Pipe = AsyncHeapRb<u8>;
 type Writer = AsyncProducer<u8, Arc<Pipe>>;
@@ -105,8 +105,11 @@ impl Emulator {
                             "1" | "ON" => true,
                             _ => panic!(),
                         };
-                        //self.send("OK").await;
-                        self.send("E07").await;
+                        if rng.gen::<f64>() < 0.2 {
+                            self.send("E07").await;
+                        } else {
+                            self.send("OK").await;
+                        }
                     }
                     "OUT?" => {
                         let value = self.dev(addr).out;

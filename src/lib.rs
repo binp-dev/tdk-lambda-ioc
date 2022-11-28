@@ -10,6 +10,7 @@ mod device;
 mod emulator;
 mod interface;
 mod serial;
+mod task;
 
 /// *Export symbols being called from IOC.*
 pub use ferrite::export;
@@ -24,6 +25,8 @@ use crate::{
     interface::Interface,
     serial::Multiplexer,
 };
+
+pub type Addr = u8;
 
 #[apply(entry_point)]
 fn app_main(mut ctx: Context) {
@@ -64,14 +67,22 @@ async fn async_main(mut ctx: Context) -> ! {
     };
 
     let mut mux = Multiplexer::new(port);
-    /*
+
     for addr in addrs_old {
-        rt.spawn(DeviceOld::new(addr, &mut ctx, mux.add_client(addr).unwrap()).run());
+        rt.spawn(task::run(
+            addr,
+            Interface::new(&mut ctx, addr),
+            DeviceOld::new(mux.add_client(addr).unwrap()),
+        ));
     }
     for addr in addrs_new {
-        rt.spawn(DeviceNew::new(addr, &mut ctx, mux.add_client(addr).unwrap()).run());
+        rt.spawn(task::run(
+            addr,
+            Interface::new(&mut ctx, addr),
+            DeviceNew::new(mux.add_client(addr).unwrap()),
+        ));
     }
-    */
+
     assert!(ctx.registry.is_empty());
     rt.block_on(mux.run())
 }

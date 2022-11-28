@@ -1,12 +1,12 @@
 mod conn;
 mod mux;
 
+use crate::Addr;
 use request_channel::Requester;
 use std::{io, string::FromUtf8Error, sync::Arc, time::Duration};
 use thiserror::Error;
 use tokio::sync::mpsc::UnboundedReceiver as Receiver;
 
-pub type Addr = u8;
 pub type Cmd = String;
 pub type CmdRes = String;
 
@@ -50,7 +50,7 @@ enum QueTx {
 type Rx = CmdRes;
 
 pub struct SerialHandle {
-    pub req: Commander,
+    pub req: Arc<Commander>,
     pub sig: Receiver<Signal>,
 }
 

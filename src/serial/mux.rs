@@ -10,8 +10,10 @@ use tokio::{
     io::{split, AsyncRead, AsyncWrite},
     runtime, select,
     sync::mpsc::{unbounded_channel as channel, UnboundedSender as Sender},
-    time::{sleep_until, Instant},
+    time::{sleep, sleep_until, Instant},
 };
+
+const YIELD_TIMEOUT: Duration = Duration::from_millis(1000);
 
 struct Client {
     resp: Responder<QueTx, Rx>,
@@ -48,11 +50,11 @@ impl<Port: AsyncRead + AsyncWrite + Unpin> Multiplexer<Port> {
             sig: sig_send,
         });
         Some(SerialHandle {
-            req: Commander {
+            req: Arc::new(Commander {
                 addr,
                 imm: self.imm_req.clone(),
                 que: req,
-            },
+            }),
             sig: sig_recv,
         })
     }
@@ -135,7 +137,14 @@ async fn get_queued<'a, 'b>(
     let addr = *cur;
     let client = clients.get_mut(&addr).unwrap();
     let req = if cur.is_online() {
-        client.resp.next().await
+        select! {
+            biased;
+            req = client.resp.next() => req,
+            () = sleep(YIELD_TIMEOUT) => {
+                log::warn!("Yield timeout reached");
+                None
+            }
+        }
     } else {
         // Clear all pending requests
         while client.resp.try_next().map(|r| r.unwrap()).is_some() {}

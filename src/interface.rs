@@ -1,18 +1,20 @@
+use crate::Addr;
 use ferrite::{
     variable::{sync::ValueGuard, *},
     Context,
 };
 use std::{fmt::Display, ops::Deref};
 
-pub fn take_var<V: Var>(ctx: &mut Context, prefix: &str, name: &str) -> V
+pub fn take_var<V: Var>(ctx: &mut Context, addr: Addr, name: &str) -> V
 where
     AnyVariable: Downcast<V>,
 {
-    log::trace!("Interface: {}:{}", prefix, name);
+    let full = format!("PS{}:{}", addr, name);
+    log::trace!("Interface: {}", full);
     let any = ctx
         .registry
-        .remove(name)
-        .unwrap_or_else(|| panic!("No such name: {}", name));
+        .remove(&full)
+        .unwrap_or_else(|| panic!("No such variable: {}", full));
     let info = any.info();
     any.downcast()
         .unwrap_or_else(|| panic!("Bad type, {:?} expected", info))
@@ -30,16 +32,16 @@ pub struct Interface {
 }
 
 impl Interface {
-    pub fn new(ctx: &mut Context, prefix: &str) -> Self {
+    pub fn new(ctx: &mut Context, addr: Addr) -> Self {
         Self {
-            ser_numb: IfaceVariable::new(take_var(ctx, prefix, "ser_numb")),
-            out_ena: IfaceVariable::new(take_var(ctx, prefix, "out_ena")),
-            volt_real: IfaceVariable::new(take_var(ctx, prefix, "volt_real")),
-            curr_real: IfaceVariable::new(take_var(ctx, prefix, "curr_real")),
-            over_volt_set_point: IfaceVariable::new(take_var(ctx, prefix, "over_volt_set_point")),
-            under_volt_set_point: IfaceVariable::new(take_var(ctx, prefix, "under_volt_set_point")),
-            volt_set: IfaceVariable::new(take_var(ctx, prefix, "volt_set")),
-            curr_set: IfaceVariable::new(take_var(ctx, prefix, "curr_set")),
+            ser_numb: IfaceVariable::new(take_var(ctx, addr, "ser_numb")),
+            out_ena: IfaceVariable::new(take_var(ctx, addr, "out_ena")),
+            volt_real: IfaceVariable::new(take_var(ctx, addr, "volt_real")),
+            curr_real: IfaceVariable::new(take_var(ctx, addr, "curr_real")),
+            over_volt_set_point: IfaceVariable::new(take_var(ctx, addr, "over_volt_set_point")),
+            under_volt_set_point: IfaceVariable::new(take_var(ctx, addr, "under_volt_set_point")),
+            volt_set: IfaceVariable::new(take_var(ctx, addr, "volt_set")),
+            curr_set: IfaceVariable::new(take_var(ctx, addr, "curr_set")),
         }
     }
 }

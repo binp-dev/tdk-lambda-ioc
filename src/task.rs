@@ -1,196 +1,133 @@
-mod param;
-mod variable;
+use crate::{
+    device::{Device, DeviceVariable, Error, Parser, ParserBool},
+    interface::{Adapter, IfaceVariable, Interface},
+    serial::{Priority, Signal},
+    Addr,
+};
+use ferrite::variable::*;
+use futures::FutureExt;
+use tokio::{join, runtime, select, sync::watch};
 
-use param::*;
-use variable::*;
+async fn init_loop<T, V: VarSync, A: Adapter<T, V>, P: Parser<T>>(
+    mut iface: IfaceVariable<T, V, A>,
+    mut device: DeviceVariable<T, P>,
+    mut on: watch::Receiver<bool>,
+) -> ! {
+    loop {
+        let result = if *on.borrow_and_update() {
+            device.read(Priority::Queued).await
+        } else {
+            Err(Error::NoResponse)
+        };
+        iface.write(result).await;
 
-use crate::serial::{Commander, Priority, SerialHandle, Signal};
-use ferrite::{variable::*, Context};
-use std::sync::Arc;
-use tokio::{join, runtime, select, sync::Notify, task::JoinHandle};
-
-pub struct Binding<T, V: VarSync, A: Adapter<T, V>, P: Parser<T>> {
-    front: IfaceVariable<T, V, A>,
-    back: DeviceVariable<T, P>,
+        on.changed().await.unwrap();
+    }
 }
 
-pub trait ParserBool: Parser<u16> + Default + Send + 'static {}
-impl<P: Parser<u16> + Default + Send + 'static> ParserBool for P {}
+async fn output_loop<T, V: VarSync, A: Adapter<T, V>, P: Parser<T>>(
+    mut iface: IfaceVariable<T, V, A>,
+    mut device: DeviceVariable<T, P>,
+    mut on: watch::Receiver<bool>,
+) -> ! {
+    loop {
+        let result = if *on.borrow_and_update() {
+            device.read(Priority::Queued).await
+        } else {
+            Err(Error::NoResponse)
+        };
+        iface.write(result).await;
 
-struct Params<B: ParserBool> {
-    pub ser_numb: Param<String, StringParser, ArrayVariable<u8>>,
-    pub out_ena: Param<u16, B, Variable<u16>>,
-    pub volt_real: Param<f64, NumParser, Variable<f64>>,
-    pub curr_real: Param<f64, NumParser, Variable<f64>>,
-    pub over_volt_set_point: Param<f64, NumParser, Variable<f64>>,
-    pub under_volt_set_point: Param<f64, NumParser, Variable<f64>>,
-    pub volt_set: Param<f64, NumParser, Variable<f64>>,
-    pub curr_set: Param<f64, NumParser, Variable<f64>>,
-}
-
-impl<B: ParserBool> Params<B> {
-    pub fn new(epics: &mut Context, prefix: &str) -> Self {
-        Self {
-            ser_numb: Param::new("SN", epics, &format!("{}:ser_numb", prefix), StringParser),
-            out_ena: Param::new("OUT", epics, &format!("{}:out_ena", prefix), B::default()),
-            volt_real: Param::new("MV", epics, &format!("{}:volt_real", prefix), NumParser),
-            curr_real: Param::new("MC", epics, &format!("{}:curr_real", prefix), NumParser),
-            over_volt_set_point: Param::new(
-                "OVP",
-                epics,
-                &format!("{}:over_volt_set_point", prefix),
-                NumParser,
-            ),
-            under_volt_set_point: Param::new(
-                "UVL",
-                epics,
-                &format!("{}:under_volt_set_point", prefix),
-                NumParser,
-            ),
-            volt_set: Param::new("PV", epics, &format!("{}:volt_set", prefix), NumParser),
-            curr_set: Param::new("PC", epics, &format!("{}:curr_set", prefix), NumParser),
+        loop {
+            select! {
+                biased;
+                () = on.changed().map(|r| r.unwrap()) => break,
+                guard = iface.read() => {
+                    let value = &*guard;
+                    match device.write(value, Priority::Immediate).await {
+                        Ok(()) => guard.accept().await,
+                        Err(err) => guard.reject(err).await,
+                    }
+                }
+            }
         }
     }
 }
 
-pub struct Device<B: ParserBool> {
-    name: String,
-    params: Params<B>,
-    serial: SerialHandle,
+async fn input<T, V: VarSync, A: Adapter<T, V>, P: Parser<T>>(
+    iface: &mut IfaceVariable<T, V, A>,
+    device: &mut DeviceVariable<T, P>,
+) {
+    iface.write(device.read(Priority::Queued).await).await;
 }
 
-pub type DeviceOld = Device<BoolParser>;
-pub type DeviceNew = Device<NumParser>;
-
-impl<B: ParserBool> Device<B> {
-    pub fn new(addr: u8, epics: &mut Context, serial: SerialHandle) -> Self {
-        let name = format!("PS{}", addr);
-        Self {
-            params: Params::new(epics, &name),
-            serial,
-            name,
-        }
-    }
-}
-
-macro_rules! async_loop {
-    ($($dst:ident = $src:expr,)* $body:block) => {
-        async {
-            $( let $dst = $src; )*
+macro_rules! loop_if {
+    ($flag:expr, $code:block) => {
+        async move {
+            let mut on = $flag;
             loop {
-                $body
+                if *on.borrow_and_update() {
+                    loop {
+                        select! {
+                            biased;
+                            () = on.changed().map(|r| r.unwrap()) => break,
+                            () = async { $code } => (),
+                        }
+                    }
+                } else {
+                    on.changed().await.unwrap()
+                }
             }
         }
     };
 }
 
-enum DeviceState<P> {
-    Running(JoinHandle<P>),
-    Stopped(P),
-}
+pub async fn run<B: ParserBool>(addr: Addr, mut iface: Interface, mut device: Device<B>) -> ! {
+    let rt = runtime::Handle::current();
+    let (on_send, on) = watch::channel(false);
 
-impl<B: ParserBool> Device<B> {
-    async fn scan_loop(params: &mut Params<B>, cmdr: Arc<Commander>) {
+    rt.spawn(init_loop(iface.ser_numb, device.vars.sn, on.clone()));
+
+    rt.spawn(output_loop(iface.out_ena, device.vars.out, on.clone()));
+    rt.spawn(output_loop(iface.volt_set, device.vars.pv, on.clone()));
+    rt.spawn(output_loop(iface.curr_set, device.vars.pc, on.clone()));
+    rt.spawn(output_loop(
+        iface.over_volt_set_point,
+        device.vars.ovp,
+        on.clone(),
+    ));
+    rt.spawn(output_loop(
+        iface.under_volt_set_point,
+        device.vars.uvl,
+        on.clone(),
+    ));
+
+    rt.spawn(loop_if!(on, {
         join!(
-            params.ser_numb.read_or_log(&cmdr, Priority::Queued),
-            params.out_ena.init_or_log(&cmdr, Priority::Queued),
-            params.volt_set.init_or_log(&cmdr, Priority::Queued),
-            params.curr_set.init_or_log(&cmdr, Priority::Queued),
-            params
-                .over_volt_set_point
-                .init_or_log(&cmdr, Priority::Queued),
-            params
-                .under_volt_set_point
-                .init_or_log(&cmdr, Priority::Queued),
+            input(&mut iface.volt_real, &mut device.vars.mv),
+            input(&mut iface.curr_real, &mut device.vars.mc),
         );
-        cmdr.yield_();
+        device.handle.req.yield_();
+    }));
 
-        join!(
-            async_loop!({
-                params
-                    .out_ena
-                    .write_or_log(&cmdr, Priority::Immediate)
-                    .await;
-            }),
-            async_loop!({
-                params
-                    .volt_set
-                    .write_or_log(&cmdr, Priority::Immediate)
-                    .await;
-            }),
-            async_loop!({
-                params
-                    .curr_set
-                    .write_or_log(&cmdr, Priority::Immediate)
-                    .await;
-            }),
-            async_loop!({
-                params
-                    .over_volt_set_point
-                    .write_or_log(&cmdr, Priority::Immediate)
-                    .await;
-            }),
-            async_loop!({
-                params
-                    .under_volt_set_point
-                    .write_or_log(&cmdr, Priority::Immediate)
-                    .await;
-            }),
-            async_loop!({
-                join!(
-                    params.volt_real.read_or_log(&cmdr, Priority::Queued),
-                    params.curr_real.read_or_log(&cmdr, Priority::Queued),
-                );
-                cmdr.yield_();
-            })
-        );
-    }
-
-    pub async fn run(self) -> ! {
-        let rt = runtime::Handle::current();
-        let cmdr = Arc::new(self.serial.req);
-        let done = Arc::new(Notify::new());
-
-        let mut state = DeviceState::Stopped(self.params);
-
-        let mut sig = self.serial.sig;
-        loop {
-            match sig.recv().await.unwrap() {
-                Signal::On => match state {
-                    DeviceState::Stopped(mut params) => {
-                        let done = done.clone();
-                        let cmdr = cmdr.clone();
-                        let name = self.name.clone();
-                        state = DeviceState::Running(rt.spawn(async move {
-                            log::info!("{}: Running", name);
-                            select! {
-                                biased;
-                                () = done.notified() => (),
-                                () = Self::scan_loop(
-                                    &mut params,
-                                    cmdr,
-                                ) => (),
-                            }
-                            log::info!("{}: Stopped", name);
-                            params
-                        }));
-                    }
-                    DeviceState::Running(_) => {
-                        log::warn!("{}: Already running", self.name);
-                    }
-                },
-                Signal::Off => match state {
-                    DeviceState::Running(jh) => {
-                        done.notify_waiters();
-                        state = DeviceState::Stopped(jh.await.unwrap());
-                    }
-                    DeviceState::Stopped(..) => {
-                        log::warn!("{}: Already stopped", self.name);
-                    }
-                },
-                Signal::Intr => {
-                    log::warn!("{}: Interrupt caught", self.name);
+    loop {
+        match device.handle.sig.recv().await.unwrap() {
+            Signal::On => {
+                if on_send.send_replace(true) {
+                    log::warn!("Device {} task is already running", addr);
+                } else {
+                    log::info!("Device {} is starting", addr);
                 }
+            }
+            Signal::Off => {
+                if on_send.send_replace(false) {
+                    log::info!("Device {} is stopping", addr);
+                } else {
+                    log::warn!("Device {} task is already stopped", addr);
+                }
+            }
+            Signal::Intr => {
+                log::error!("Device {} sent SRQ", addr);
             }
         }
     }
