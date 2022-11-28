@@ -1,16 +1,15 @@
-use super::{Error, Parser};
+use super::{variable::Parser, Error};
 use crate::serial::{Commander, Priority};
 use ferrite::{variable::*, Context};
-use std::{fmt::Display, marker::PhantomData, str::FromStr, sync::Arc};
 
-pub struct Param<T, P: Parser<T>, V: Var> {
+pub struct Param<T, P: Parser<T>, V: VarSync> {
     cmd: String,
     var: V,
     parser: P,
     value: Option<T>,
 }
 
-impl<T, P: Parser<T>, V: Var> Param<T, P, V>
+impl<T, P: Parser<T>, V: VarSync> Param<T, P, V>
 where
     AnyVariable: Downcast<V>,
 {
@@ -33,13 +32,13 @@ where
     }
 }
 
-impl<T, P: Parser<T>, V: Var> Param<T, P, V> {
+impl<T, P: Parser<T>, V: VarSync> Param<T, P, V> {
     fn log_err(&self, err: Error) {
         log::error!("({}, {}) error: {}", self.cmd.clone(), self.var.name(), err);
     }
 }
 
-impl<T: Copy + FromStr, P: Parser<T>> Param<T, P, Variable<T>> {
+impl<T: Copy, P: Parser<T>> Param<T, P, Variable<T>> {
     async fn read_from_device(&mut self, cmdr: &Commander, priority: Priority) -> Result<T, Error> {
         let cmd = format!("{}?", self.cmd);
         let cmd_res = cmdr.execute(cmd, priority).await.ok_or(Error::NoResponse)?;
@@ -69,7 +68,7 @@ impl<T: Copy + FromStr, P: Parser<T>> Param<T, P, Variable<T>> {
     }
 }
 
-impl<T: Copy + FromStr, P: Parser<T>> Param<T, P, Variable<T>> {
+impl<T: Copy, P: Parser<T>> Param<T, P, Variable<T>> {
     pub async fn read(&mut self, cmdr: &Commander, priority: Priority) -> Result<(), Error> {
         let val_res = self.read_from_device(cmdr, priority).await;
         let var = self.var.request().await;
@@ -93,7 +92,7 @@ impl<T: Copy + FromStr, P: Parser<T>> Param<T, P, Variable<T>> {
     }
 }
 
-impl<T: Copy + Display, P: Parser<T>> Param<T, P, Variable<T>> {
+impl<T: Copy, P: Parser<T>> Param<T, P, Variable<T>> {
     pub async fn write(&mut self, cmdr: &Commander, priority: Priority) -> Result<(), Error> {
         let mut var = self.var.acquire().await;
         let value = *var;
@@ -148,45 +147,4 @@ impl<P: Parser<String>> Param<String, P, ArrayVariable<u8>> {
             self.log_err(e);
         }
     }
-}
-
-pub struct DeviceVariable<T, P: Parser<T>> {
-    cmdr: Arc<Commander>,
-    name: String,
-    parser: P,
-    _p: PhantomData<T>,
-}
-
-impl<T: Copy + FromStr, P: Parser<T>> DeviceVariable<T, P> {
-    async fn read(&mut self, priority: Priority) -> Result<T, Error> {
-        let cmd = format!("{}?", self.name);
-        let cmd_res = self
-            .cmdr
-            .execute(cmd, priority)
-            .await
-            .ok_or(Error::NoResponse)?;
-        self.parser.load(cmd_res).map_err(Error::Parse)
-    }
-}
-
-impl<T: Copy + Display, P: Parser<T>> DeviceVariable<T, P> {
-    pub async fn write(&mut self, value: T, priority: Priority) -> Result<(), Error> {
-        self.cmdr
-            .execute(
-                format!("{} {}", self.name, self.parser.store(value)),
-                priority,
-            )
-            .await
-            .ok_or(Error::NoResponse)
-            .and_then(|cmd_res| match cmd_res.as_str() {
-                "OK" => Ok(()),
-                _ => Err(Error::Parse(cmd_res)),
-            })
-    }
-}
-
-pub struct Binding<T, P: Parser<T>, V: Var> {
-    front: V,
-    back: DeviceVariable<T, P>,
-    value: Option<T>,
 }

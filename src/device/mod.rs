@@ -1,23 +1,13 @@
 mod param;
-pub mod parser;
+mod variable;
 
 use param::*;
-use parser::*;
-
-use ferrite::{variable::*, Context};
-use std::{fmt::Debug, sync::Arc};
-use thiserror::Error;
-use tokio::{join, runtime, select, sync::Notify, task::JoinHandle};
+use variable::*;
 
 use crate::serial::{Commander, Handle, Priority, Signal};
-
-#[derive(Error, Debug)]
-pub enum Error {
-    #[error("No response from device")]
-    NoResponse,
-    #[error("Unexpected response: {0}")]
-    Parse(String),
-}
+use ferrite::{variable::*, Context};
+use std::sync::Arc;
+use tokio::{join, runtime, select, sync::Notify, task::JoinHandle};
 
 pub trait ParserBool: Parser<u16> + Default + Send + 'static {}
 impl<P: Parser<u16> + Default + Send + 'static> ParserBool for P {}
@@ -64,8 +54,8 @@ pub struct Device<B: ParserBool> {
     serial: Handle,
 }
 
-pub type DeviceOld = Device<parser::BoolParser>;
-pub type DeviceNew = Device<parser::NumParser>;
+pub type DeviceOld = Device<BoolParser>;
+pub type DeviceNew = Device<NumParser>;
 
 impl<B: ParserBool> Device<B> {
     pub fn new(addr: u8, epics: &mut Context, serial: Handle) -> Self {
