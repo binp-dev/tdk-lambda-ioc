@@ -210,6 +210,7 @@ struct Scheduler {
     current: Option<(Addr, bool)>,
     online: VecDeque<Addr>,
     offline: VecDeque<(Instant, Addr)>,
+    counter: usize,
 }
 
 impl Scheduler {
@@ -221,6 +222,7 @@ impl Scheduler {
             current: None,
             online: VecDeque::new(),
             offline,
+            counter: 0,
         }
     }
 
@@ -228,7 +230,7 @@ impl Scheduler {
         if self.current.is_none() {
             self.current.replace(match self.offline.pop_front() {
                 Some((ts, a)) => {
-                    if ts <= Instant::now() {
+                    if ts <= Instant::now() && (self.counter % 2 == 0 || self.online.is_empty()) {
                         (a, false)
                     } else {
                         match self.online.pop_front() {
@@ -245,6 +247,7 @@ impl Scheduler {
                 }
                 None => (self.online.pop_front()?, true),
             });
+            self.counter += 1;
         }
         Some(SchedGuard { owner: self })
     }
