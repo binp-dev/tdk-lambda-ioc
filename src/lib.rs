@@ -31,7 +31,7 @@ pub type Addr = u8;
 #[apply(entry_point)]
 fn app_main(mut ctx: Context) {
     use env_logger::Env;
-    env_logger::Builder::from_env(Env::default().default_filter_or("trace")).init();
+    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
     block_on(async_main(ctx));
 }
 
@@ -46,7 +46,7 @@ async fn async_main(mut ctx: Context) -> ! {
     let addrs_new = 1..7;
 
     #[cfg(feature = "tcp")]
-    let port = tokio::net::TcpStream::connect("10.0.0.77:4001")
+    let port = tokio::net::TcpStream::connect("10.0.0.79:4001")
         .await
         .unwrap();
 
