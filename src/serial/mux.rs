@@ -79,7 +79,10 @@ impl<Port: AsyncRead + AsyncWrite + Unpin> Multiplexer<Port> {
             loop {
                 let addr = intr.recv().await.unwrap();
                 log::trace!("Intr: {}", addr);
-                clients[&addr].send(Signal::Intr).unwrap();
+                match clients.get(&addr) {
+                    Some(client) => client.send(Signal::Intr).unwrap(),
+                    None => log::error!("No client for interrupt: {}", addr),
+                }
             }
         });
 
