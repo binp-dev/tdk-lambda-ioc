@@ -195,6 +195,7 @@ async fn check_online(
     sig: &Sender<Signal>,
 ) {
     let addr = *cur;
+    log::debug!("Check device {} online", addr);
     match conn.is_online(addr).await {
         Ok(true) => {
             sig.send(Signal::On).unwrap();

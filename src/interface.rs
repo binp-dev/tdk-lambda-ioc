@@ -78,6 +78,7 @@ impl Adapter<String, ArrayVariable<u8>> for StringAdapter {
 
 /// Interface-side variable.
 pub struct IfaceVariable<T, V: VarSync, A: Adapter<T, V>> {
+    name: String,
     variable: V,
     adapter: A,
     last_value: Option<T>,
@@ -86,6 +87,7 @@ pub struct IfaceVariable<T, V: VarSync, A: Adapter<T, V>> {
 impl<T, V: VarSync, A: Adapter<T, V>> IfaceVariable<T, V, A> {
     pub fn new(variable: V) -> Self {
         Self {
+            name: variable.name(),
             variable,
             adapter: A::default(),
             last_value: None,
@@ -101,6 +103,7 @@ impl<T, V: VarSync, A: Adapter<T, V>> IfaceVariable<T, V, A> {
         ReadGuard {
             value,
             guard,
+            name: &self.name,
             adapter: &self.adapter,
             last_value: &mut self.last_value,
         }
@@ -113,7 +116,10 @@ impl<T, V: VarSync, A: Adapter<T, V>> IfaceVariable<T, V, A> {
                 self.last_value.replace(value);
                 guard.accept()
             }
-            Err(reason) => guard.reject(&format!("{}", reason)),
+            Err(reason) => {
+                log::warn!("{}: {}", self.name, reason);
+                guard.reject(&format!("{}", reason))
+            }
         }
         .await;
     }
@@ -122,6 +128,7 @@ impl<T, V: VarSync, A: Adapter<T, V>> IfaceVariable<T, V, A> {
 pub struct ReadGuard<'a, T, V: VarSync, A: Adapter<T, V>> {
     value: T,
     guard: ValueGuard<'a, V>,
+    name: &'a String,
     adapter: &'a A,
     last_value: &'a mut Option<T>,
 }
@@ -133,6 +140,7 @@ impl<'a, T, V: VarSync, A: Adapter<T, V>> ReadGuard<'a, T, V, A> {
         self.guard.accept().await;
     }
     pub async fn reject<R: Display>(self, reason: R) {
+        log::warn!("{}: {}", self.name, reason);
         self.guard.reject(&format!("{}", reason)).await;
     }
 }

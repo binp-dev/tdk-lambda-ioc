@@ -118,7 +118,7 @@ impl<W: AsyncWrite + Unpin, R: AsyncRead + Unpin> Connection<W, R> {
                     return Ok(resp);
                 }
                 Err(_) => {
-                    log::warn!("No response to '{}' (attempt: {})", cmd, i + 1);
+                    log::trace!("No response to '{}' (attempt: {})", cmd, i + 1);
                 }
             }
         }
