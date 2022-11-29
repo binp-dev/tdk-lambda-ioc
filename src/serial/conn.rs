@@ -104,7 +104,7 @@ impl<W: AsyncWrite + Unpin, R: AsyncRead + Unpin> Connection<W, R> {
                 if buf.pop().map(|b| b != LINE_TERM).unwrap_or(true) {
                     return Err(io::Error::new(
                         io::ErrorKind::BrokenPipe,
-                        "Serial connection closed unexpectedly",
+                        "Connection closed unexpectedly (no line terminator)",
                     ));
                 }
                 Ok(())
@@ -141,20 +141,27 @@ impl<'a, R: AsyncBufRead + Unpin> Future for Clear<'a, R> {
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut count = 0;
-        loop {
+        Poll::Ready(loop {
             let len = match Pin::new(&mut self.reader).poll_fill_buf(cx) {
-                Poll::Pending => break Poll::Ready(Ok(count)),
+                Poll::Pending => break Ok(count),
                 Poll::Ready(res) => match res {
                     Ok(buf) => {
-                        log::error!("Unexpected input: {:?}", String::from_utf8_lossy(buf));
-                        buf.len()
+                        if !buf.is_empty() {
+                            log::error!("Unexpected input: {:?}", String::from_utf8_lossy(buf));
+                            buf.len()
+                        } else {
+                            break Err(io::Error::new(
+                                io::ErrorKind::BrokenPipe,
+                                "Connection closed unexpectedly (read zero bytes)",
+                            ));
+                        }
                     }
-                    Err(err) => break Poll::Ready(Err(err)),
+                    Err(err) => break Err(err),
                 },
             };
             Pin::new(&mut self.reader).consume(len);
             count += len;
-        }
+        })
     }
 }
 

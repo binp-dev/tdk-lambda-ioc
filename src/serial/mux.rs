@@ -119,9 +119,9 @@ async fn request_immediate(
         }
         Err(err) => {
             log::error!(
-                "Cannot run immediate command '{}' (addr: {}): {}",
-                &cmd,
+                "Device {} failed to execute immediate command '{}': {}",
                 addr,
+                &cmd,
                 err
             );
         }
@@ -168,22 +168,15 @@ async fn request_queued(
             Ok(resp) => {
                 r.respond(resp);
             }
-            Err(Error::Timeout) => {
+            Err(err) => {
                 log::error!(
-                    "Device {} is offline (no response to command '{}')",
+                    "Device {} failed to execute queued command '{}', switching off: {}",
                     addr,
-                    &cmd
+                    &cmd,
+                    err
                 );
                 sig.send(Signal::Off).unwrap();
                 cur.yield_offline();
-            }
-            Err(err) => {
-                log::error!(
-                    "Cannot run queued command '{}' (addr: {}): {}",
-                    &cmd,
-                    addr,
-                    err
-                );
             }
         },
         None | Some((QueTx::Yield, ..)) => {
@@ -205,7 +198,10 @@ async fn check_online(
             cur.yield_online();
         }
         Ok(false) => cur.yield_offline(),
-        Err(err) => log::error!("Error while checking device {}: {}", addr, err),
+        Err(err) => {
+            log::error!("Error while checking device {}: {}", addr, err);
+            cur.yield_offline();
+        }
     }
 }
 

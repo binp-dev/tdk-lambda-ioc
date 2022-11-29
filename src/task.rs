@@ -116,12 +116,12 @@ pub async fn run<B: ParserBool>(addr: Addr, mut iface: Interface, mut device: De
                 if on_send.send_replace(true) {
                     log::warn!("Device {} task is already running", addr);
                 } else {
-                    log::info!("Device {} is starting", addr);
+                    log::info!("Starting device {}", addr);
                 }
             }
             Signal::Off => {
                 if on_send.send_replace(false) {
-                    log::info!("Device {} is stopping", addr);
+                    log::info!("Stopping device {}", addr);
                 } else {
                     log::warn!("Device {} task is already stopped", addr);
                 }
