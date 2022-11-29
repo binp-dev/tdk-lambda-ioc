@@ -16,7 +16,6 @@ mod task;
 pub use ferrite::export;
 
 use ferrite::{entry_point, Context};
-use futures::executor::block_on;
 use macro_rules_attribute::apply;
 use tokio::runtime;
 
@@ -30,18 +29,21 @@ pub type Addr = u8;
 
 #[apply(entry_point)]
 fn app_main(mut ctx: Context) {
-    use env_logger::Env;
-    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
-    block_on(async_main(ctx));
-}
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
-async fn async_main(mut ctx: Context) -> ! {
-    log::info!("start");
     let rt = runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .unwrap();
     let _guard = rt.enter();
+
+    rt.block_on(async_main(ctx));
+}
+
+async fn async_main(mut ctx: Context) -> ! {
+    log::info!("start");
+    let rt = runtime::Handle::current();
+
     let addrs_old = [0];
     let addrs_new = 1..7;
 
@@ -84,5 +86,5 @@ async fn async_main(mut ctx: Context) -> ! {
     }
 
     assert!(ctx.registry.is_empty());
-    rt.block_on(mux.run())
+    rt.spawn(mux.run()).await.unwrap()
 }
