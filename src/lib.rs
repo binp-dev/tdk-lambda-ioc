@@ -9,6 +9,8 @@ mod device;
 #[cfg(feature = "emulator")]
 mod emulator;
 mod interface;
+#[cfg(feature = "tcp")]
+mod net;
 mod serial;
 mod task;
 
@@ -47,8 +49,16 @@ async fn async_main(mut ctx: Context) -> ! {
     let addrs_old = [0];
     let addrs_new = 1..7;
 
+    #[cfg(feature = "serial")]
+    let port = {
+        use tokio_serial::SerialPortBuilderExt;
+        tokio_serial::new("/dev/ttyUSB0", 19200)
+            .open_native_async()
+            .unwrap()
+    };
+
     #[cfg(feature = "tcp")]
-    let port = tokio::net::TcpStream::connect("10.0.0.79:4001")
+    let port = net::PersistentTcpStream::connect("10.0.0.79:4001")
         .await
         .unwrap();
 
@@ -58,14 +68,6 @@ async fn async_main(mut ctx: Context) -> ! {
             emulator::Emulator::new(addrs_old.into_iter().chain(addrs_new.clone().into_iter()));
         rt.spawn(emu.run());
         port
-    };
-
-    #[cfg(feature = "serial")]
-    let port = {
-        use tokio_serial::SerialPortBuilderExt;
-        tokio_serial::new("/dev/ttyUSB0", 19200)
-            .open_native_async()
-            .unwrap()
     };
 
     let mut mux = Multiplexer::new(port);
